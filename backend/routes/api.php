@@ -20,3 +20,7 @@ Route::put('/games/{id}', [GameController::class, 'update']); // Zadání výsle
 
 // 4. Tabulka / Žebříček
 Route::get('/tournaments/{id}/standings', [TournamentController::class, 'standings']);
+
+Route::get('/test-connection', function () {
+    return response()->json(['message' => 'Spojení funguje! Laravel zdraví Vue.']);
+});
