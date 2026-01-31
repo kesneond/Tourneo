@@ -130,6 +130,22 @@ class TournamentController extends Controller
         });
 
         // Seřadit podle bodů (sestupně)
-        return response()->json($standings->sortByDesc('points')->values());
+        $sortedStats = collect($standings)->values()->sort(function ($a, $b) {
+            if ($a['points'] !== $b['points']) {
+                return $b['points'] <=> $a['points'];
+            }
+            
+            $diffA = $a['score_diff'];
+            $diffB = $b['score_diff'];
+            
+            if ($diffA !== $diffB) {
+                return $diffB <=> $diffA;
+            }
+            
+            return $b['score_diff'] <=> $a['score_diff'];
+
+        })->values();
+
+        return response()->json($sortedStats);
     }
 }
