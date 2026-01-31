@@ -78,7 +78,7 @@ const submitForm = async () => {
                         <div>
                             <label class="block text-xs font-bold text-green-700 uppercase mb-1">Výhra</label>
                             <div class="relative">
-                                <input v-model="form.points_win" type="number" required
+                                <input v-model="form.points_win" type="number" min="0" required
                                     class="block w-full rounded-lg border-green-200 bg-green-50 text-green-800 font-bold text-center shadow-sm focus:ring-green-500 focus:border-green-500 sm:text-sm p-2.5 border" />
                                 <span class="absolute right-8 top-3 text-xs text-green-400 font-bold">b.</span>
                             </div>
@@ -87,7 +87,7 @@ const submitForm = async () => {
                         <div>
                             <label class="block text-xs font-bold text-orange-600 uppercase mb-1">Remíza</label>
                             <div class="relative">
-                                <input v-model="form.points_draw" type="number" required
+                                <input v-model="form.points_draw" type="number" min="0" required
                                     class="block w-full rounded-lg border-orange-200 bg-orange-50 text-orange-800 font-bold text-center shadow-sm focus:ring-orange-500 focus:border-orange-500 sm:text-sm p-2.5 border" />
                                 <span class="absolute right-8 top-3 text-xs text-orange-400 font-bold">b.</span>
                             </div>
@@ -96,7 +96,7 @@ const submitForm = async () => {
                         <div>
                             <label class="block text-xs font-bold text-red-600 uppercase mb-1">Prohra</label>
                             <div class="relative">
-                                <input v-model="form.points_loss" type="number" required
+                                <input v-model="form.points_loss" type="number" min="0" required
                                     class="block w-full rounded-lg border-red-200 bg-red-50 text-red-800 font-bold text-center shadow-sm focus:ring-red-500 focus:border-red-500 sm:text-sm p-2.5 border" />
                                 <span class="absolute right-8 top-3 text-xs text-red-400 font-bold">b.</span>
                             </div>

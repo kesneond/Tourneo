@@ -19,7 +19,12 @@ class TournamentController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'start_date' => 'required|date',
             'format' => 'required|in:round_robin', // Zatím jen tento formát
+            'points_win' => 'required|integer|min:0',
+            'points_draw' => 'required|integer|min:0',
+            'points_loss' => 'required|integer|min:0',
         ]);
 
         $tournament = Tournament::create($validated);
