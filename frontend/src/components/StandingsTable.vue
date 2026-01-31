@@ -41,8 +41,10 @@ defineProps({
                         <span v-else>{{ index + 1 }}.</span>
                     </td>
                     
-                    <td class="px-3 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {{ player.name }}
+                    <td class="px-3 py-3 text-sm font-medium text-gray-900 max-w-[100px] sm:max-w-[150px]" :title="player.name">
+                        <div class="truncate">
+                            {{ player.name }}
+                        </div>
                     </td>
                     
                     <td class="px-2 py-3 whitespace-nowrap text-sm text-gray-500 text-center">

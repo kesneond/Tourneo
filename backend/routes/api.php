@@ -14,6 +14,7 @@ Route::put('/tournaments/{tournament}', [TournamentController::class, 'update'])
 
 // 2. Hráči (Přidání do turnaje)
 Route::post('/tournaments/{id}/players', [PlayerController::class, 'store']);
+Route::put('/players/{player}', [PlayerController::class, 'update']);
 
 // 3. Logika hry (Generování a výsledky)
 Route::post('/tournaments/{id}/generate', [TournamentController::class, 'generateGames']);

@@ -83,7 +83,23 @@ const handleStartTournament = async () => {
     await loadData();
 };
 
-const handleAddPlayer = async () => { if (!newPlayerName.value.trim()) return; await store.addPlayer(route.params.id, newPlayerName.value); newPlayerName.value = ''; };
+const handleAddPlayer = async () => {
+    const name = newPlayerName.value.trim();
+    if (!name) return;
+
+    // 1. KONTROLA DUPLICITY NA FRONTENDU (Rychlá odezva)
+    const duplicate = tournament.value.players.find(p => p.name.toLowerCase() === name.toLowerCase());
+    
+    if (duplicate) {
+        alert(`Hráč se jménem "${duplicate.name}" už v turnaji je.\nProsím, zvolte jiné jméno (např. "${name} 2").`);
+        // Input zůstane vyplněný, uživatel ho může opravit
+        return; 
+    }
+
+    // Pokud je vše OK, pošleme na server
+    await store.addPlayer(route.params.id, name);
+    newPlayerName.value = '';
+};
 const updateVenues = async (e) => { const count = parseInt(e.target.value); if (count > 0) await store.updateTournament(tournament.value.id, { venues_count: count }); };
 
 // --- AKCE ---
@@ -155,6 +171,48 @@ const saveFinishedMatch = async () => {
     }
 };
 
+// NOVÉ PROMĚNNÉ PRO EDITACI HRÁČE
+const editingPlayerId = ref(null);
+const editingPlayerName = ref('');
+
+// NOVÉ FUNKCE PRO PŘEJMENOVÁNÍ
+const startEditingPlayer = (player) => {
+    editingPlayerId.value = player.id;
+    editingPlayerName.value = player.name;
+};
+
+const cancelEditingPlayer = () => {
+    editingPlayerId.value = null;
+    editingPlayerName.value = '';
+};
+
+const savePlayerName = async (player) => {
+    const newName = editingPlayerName.value.trim();
+    
+    if (!newName || newName === player.name) {
+        cancelEditingPlayer();
+        return;
+    }
+
+    // Kontrola duplicity při přejmenování
+    const duplicate = tournament.value.players.find(p => p.name.toLowerCase() === newName.toLowerCase() && p.id !== player.id);
+    if (duplicate) {
+         alert(`Hráč se jménem "${duplicate.name}" už v turnaji je.`);
+         return;
+    }
+
+    try {
+        // Volání API (musíte mít api importované z axiosu)
+        await api.put(`/players/${player.id}`, { name: newName });
+        
+        // Aktualizace dat lokálně (abychom nemuseli reloadovat celou stránku)
+        player.name = newName;
+        editingPlayerId.value = null;
+    } catch (e) {
+        alert('Chyba: ' + (e.response?.data?.error || e.message));
+    }
+};
+
 onMounted(loadData);
 </script>
 
@@ -179,7 +237,43 @@ onMounted(loadData);
         <div v-if="tournament.status === 'draft'" class="bg-white rounded-xl shadow p-6">
             <h2 class="text-xl font-bold mb-4">Registrace</h2>
             <div class="flex gap-4 mb-4"><input v-model="newPlayerName" @keyup.enter="handleAddPlayer" class="border p-2 rounded flex-1" placeholder="Jméno" /><button @click="handleAddPlayer" class="bg-indigo-600 text-white px-4 rounded">Přidat</button></div>
-            <div class="flex flex-wrap gap-2 mb-4"><span v-for="p in tournament.players" :key="p.id" class="bg-gray-100 px-2 py-1 rounded flex gap-2">{{ p.name }} <button @click="store.removePlayer(p.id)" class="text-red-500">x</button></span></div>
+            <div class="flex flex-wrap gap-2 mb-4">
+                <div v-for="p in tournament.players" :key="p.id" 
+                    class="bg-gray-100 px-3 py-1.5 rounded-lg flex items-center gap-2 border border-gray-200 shadow-sm transition-all hover:bg-white hover:border-indigo-300 group">
+                    
+                    <template v-if="editingPlayerId !== p.id">
+                        <span class="font-medium text-gray-800 cursor-pointer" @dblclick="startEditingPlayer(p)" title="Dvojklikem upravíte">
+                            {{ p.name }}
+                        </span>
+                        
+                        <button @click="startEditingPlayer(p)" class="text-gray-400 hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                            ✏️
+                        </button>
+
+                        <button @click="store.removePlayer(p.id)" class="text-gray-400 hover:text-red-500 font-bold ml-1">
+                            &times;
+                        </button>
+                    </template>
+
+                    <template v-else>
+                        <input 
+                            v-model="editingPlayerName" 
+                            @keyup.enter="savePlayerName(p)"
+                            @keyup.esc="cancelEditingPlayer"
+                            ref="playerInput"
+                            class="w-32 px-1 py-0 text-sm border-b-2 border-indigo-500 bg-transparent focus:outline-none"
+                            autoFocus
+                        />
+                        <button @click="savePlayerName(p)" class="text-green-600 hover:text-green-800 font-bold text-xs">OK</button>
+                        <button @click="cancelEditingPlayer" class="text-gray-400 hover:text-gray-600 text-xs">&times;</button>
+                    </template>
+
+                </div>
+                
+                <div v-if="tournament.players.length === 0" class="text-gray-400 italic text-sm py-2">
+                    Zatím žádní hráči.
+                </div>
+            </div>
             <button @click="handleStartTournament" :disabled="tournament.players.length < 2" class="bg-green-600 text-white font-bold py-3 px-8 rounded">Start</button>
         </div>
 
@@ -305,10 +399,14 @@ onMounted(loadData);
                                 <span>#{{ match.id }}</span>
                                 <span>ČEKÁ</span>
                             </div>
-                            <div class="text-center font-bold text-gray-800">
-                                {{ match.player1.name }} 
-                                <span class="text-gray-400 text-xs font-normal">vs</span> 
-                                {{ match.player2.name }}
+                            <div class="flex items-center justify-center w-full gap-1 font-bold text-gray-800">
+                                <div class="truncate max-w-[45%] text-right" :title="match.player1.name">
+                                    {{ match.player1.name }}
+                                </div>
+                                <span class="text-gray-400 text-xs font-normal shrink-0">vs</span>
+                                <div class="truncate max-w-[45%] text-left" :title="match.player2.name">
+                                    {{ match.player2.name }}
+                                </div>
                             </div>
                         </div>
                         
