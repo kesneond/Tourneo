@@ -1,0 +1,47 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build directory (tohle je důležité, sem padá hotová aplikace)
+dist
+dist-ssr
+
+# Local env files
+.env.local
+.env.*.local
+*.local
+
+# Editor directories
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Typescript
+*.tsbuildinfo
+
+# Optional: ESLint cache
+.eslintcache
+
+# Testing
+/coverage
+/cypress/videos/
+/cypress/screenshots/
+__screenshots__/
+
+# Vite temp files
+*.timestamp-*-*.mjs
