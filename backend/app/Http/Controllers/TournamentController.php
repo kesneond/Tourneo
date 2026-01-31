@@ -111,12 +111,19 @@ class TournamentController extends Controller
                 $myScore = $isPlayer1 ? $game->score1 : $game->score2;
                 $opponentScore = $isPlayer1 ? $game->score2 : $game->score1;
 
+                // Toto jste chtěl zachovat (rozdíl skóre)
                 $scoreDiff += ($myScore - $opponentScore);
 
+                // --- ZMĚNA ZDE: Použití nastavení z DB ---
                 if ($myScore > $opponentScore) {
-                    $points += 3; // Výhra
+                    // Výhra
+                    $points += $tournament->points_win; 
                 } elseif ($myScore === $opponentScore) {
-                    $points += 1; // Remíza
+                    // Remíza
+                    $points += $tournament->points_draw;
+                } else {
+                    // Prohra (přidáme, kdybyste si nastavil třeba -1 bod za prohru)
+                    $points += $tournament->points_loss; 
                 }
             }
 

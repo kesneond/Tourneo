@@ -15,7 +15,10 @@ class Tournament extends Model
         'start_date', 
         'format', 
         'status',
-        'venues_count'
+        'venues_count',
+        'points_win',
+        'points_draw',
+        'points_loss'
     ];
 
     public function players()
