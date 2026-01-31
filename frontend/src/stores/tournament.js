@@ -71,6 +71,20 @@ export const useTournamentStore = defineStore('tournament', () => {
         await fetchTournamentDetail(tournamentId);
     };
 
+    // 6. Aktualizovat nastavení turnaje (např. počet stolů)
+    const updateTournament = async (id, data) => {
+        try {
+            const response = await api.put(`/tournaments/${id}`, data);
+            // Aktualizujeme lokální data, ať se to hned projeví
+            if (currentTournament.value && currentTournament.value.id === id) {
+                currentTournament.value = { ...currentTournament.value, ...response.data };
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Nepodařilo se uložit nastavení.');
+        }
+    };
+
     // Musíme vrátit všechno, co chceme používat v komponentách
     return {
         tournaments,
@@ -82,6 +96,7 @@ export const useTournamentStore = defineStore('tournament', () => {
         deleteTournament,
         fetchTournamentDetail,
         addPlayer,
-        generateMatches
+        generateMatches,
+        updateTournament
     };
 });

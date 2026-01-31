@@ -27,6 +27,18 @@ class TournamentController extends Controller
         return response()->json($tournament, 201);
     }
 
+    public function update(Request $request, Tournament $tournament)
+    {
+        $validated = $request->validate([
+            'venues_count' => 'integer|min:1',
+            // Zde můžete přidat validaci i pro name, description atd., pokud byste je chtěl editovat
+        ]);
+
+        $tournament->update($validated);
+
+        return response()->json($tournament);
+    }
+
     // Detail turnaje (včetně hráčů a zápasů)
     public function show($id)
     {

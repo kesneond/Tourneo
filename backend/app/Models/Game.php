@@ -15,7 +15,8 @@ class Game extends Model
         'player2_id', 
         'score1', 
         'score2', 
-        'status'
+        'status',
+        'venue'
     ];
 
     public function tournament()

@@ -5,41 +5,65 @@ defineProps({
 </script>
 
 <template>
-    <div class="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
-        <table class="min-w-full divide-y divide-gray-200 bg-white">
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
                 <tr>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pořadí</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hráč</th>
-                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Zápasy</th>
-                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Skóre</th>
-                    <th scope="col" class="px-6 py-3 text-center text-xs font-bold text-gray-900 uppercase tracking-wider">Body</th>
+                    <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-10">
+                        #
+                    </th>
+                    
+                    <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Jméno
+                    </th>
+                    
+                    <th scope="col" class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
+                        Zápasy
+                    </th>
+                    
+                    <th scope="col" class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-16 hidden sm:table-cell">
+                        Skóre
+                    </th>
+
+                    <th scope="col" class="px-3 py-3 text-center text-xs font-bold text-indigo-700 uppercase tracking-wider w-16">
+                        Body
+                    </th>
                 </tr>
             </thead>
-            <tbody class="divide-y divide-gray-200">
-                <tr v-for="(row, index) in standings" :key="row.id" :class="index < 3 ? 'bg-indigo-50/30' : ''">
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">
-                        {{ index + 1 }}.
+            
+            <tbody class="bg-white divide-y divide-gray-200">
+                <tr v-for="(player, index) in standings" :key="player.id" :class="index < 3 ? 'bg-yellow-50/30' : ''">
+                    
+                    <td class="px-3 py-3 whitespace-nowrap text-sm text-gray-500">
+                        <span v-if="index === 0">🥇</span>
+                        <span v-else-if="index === 1">🥈</span>
+                        <span v-else-if="index === 2">🥉</span>
+                        <span v-else>{{ index + 1 }}.</span>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {{ row.name }}
-                        <span v-if="index === 0" class="ml-2 text-yellow-500">👑</span>
+                    
+                    <td class="px-3 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {{ player.name }}
                     </td>
+                    
+                    <td class="px-2 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                        {{ player.matches_played }}
+                    </td>
+                    
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500">
-                        {{ row.matches_played }}
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500">
-                        <span :class="row.score_diff > 0 ? 'text-green-600' : (row.score_diff < 0 ? 'text-red-600' : 'text-gray-500')">
-                            {{ row.score_diff > 0 ? '+' : ''}}{{ row.score_diff }}
+                        <span :class="player.score_diff > 0 ? 'text-green-600' : (player.score_diff < 0 ? 'text-red-600' : 'text-gray-500')">
+                            {{ player.score_diff > 0 ? '+' : ''}}{{ player.score_diff }}
                         </span>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-center">
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-bold bg-indigo-100 text-indigo-800">
-                            {{ row.points }}
-                        </span>
+                    
+                    <td class="px-3 py-3 whitespace-nowrap text-sm font-bold text-indigo-600 text-center">
+                        {{ player.points }}
                     </td>
                 </tr>
             </tbody>
         </table>
+        
+        <div v-if="standings.length === 0" class="text-center py-6 text-gray-400 text-sm">
+            Zatím žádné výsledky.
+        </div>
     </div>
 </template>
