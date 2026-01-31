@@ -5,9 +5,10 @@ defineProps({
 </script>
 
 <template>
-    <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
+    <div class="overflow-x-auto overflow-y-auto max-h-[600px] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent rounded-lg border border-gray-200">
+        
+        <table class="min-w-full divide-y divide-gray-200 relative">
+            <thead class="bg-gray-50 sticky top-0 z-10 shadow-sm">
                 <tr>
                     <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-10">
                         #
@@ -17,12 +18,12 @@ defineProps({
                         Jméno
                     </th>
                     
-                    <th scope="col" class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
+                    <th scope="col" class="px-1 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
                         Zápasy
                     </th>
                     
-                    <th scope="col" class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-16 hidden sm:table-cell">
-                        Skóre
+                    <th scope="col" class="px-1 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-12 hidden sm:table-cell" title="Rozdíl skóre">
+                        +/-
                     </th>
 
                     <th scope="col" class="px-3 py-3 text-center text-xs font-bold text-indigo-700 uppercase tracking-wider w-16">
@@ -47,13 +48,17 @@ defineProps({
                         </div>
                     </td>
                     
-                    <td class="px-2 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                    <td class="px-1 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                         {{ player.matches_played }}
                     </td>
                     
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500">
-                        <span :class="player.score_diff > 0 ? 'text-green-600' : (player.score_diff < 0 ? 'text-red-600' : 'text-gray-500')">
-                            {{ player.score_diff > 0 ? '+' : ''}}{{ player.score_diff }}
+                    <td class="px-1 py-3 whitespace-nowrap text-sm text-center hidden sm:table-cell font-mono">
+                        <span :class="{
+                            'text-green-600 font-bold': player.score_diff > 0,
+                            'text-red-500': player.score_diff < 0,
+                            'text-gray-400': player.score_diff === 0
+                        }">
+                            {{ player.score_diff > 0 ? '+' : '' }}{{ player.score_diff }}
                         </span>
                     </td>
                     

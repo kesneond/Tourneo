@@ -213,6 +213,30 @@ const savePlayerName = async (player) => {
     }
 };
 
+// --- LOGIKA PRO DRAG-SCROLL V HISTORII ---
+const historyContainer = ref(null);
+const isDraggingHistory = ref(false);
+let startXHistory = 0;
+let scrollLeftHistory = 0;
+
+const startDragHistory = (e) => {
+    isDraggingHistory.value = true;
+    startXHistory = e.pageX - historyContainer.value.offsetLeft;
+    scrollLeftHistory = historyContainer.value.scrollLeft;
+};
+
+const stopDragHistory = () => {
+    isDraggingHistory.value = false;
+};
+
+const doDragHistory = (e) => {
+    if (!isDraggingHistory.value) return;
+    e.preventDefault();
+    const x = e.pageX - historyContainer.value.offsetLeft;
+    const walk = (x - startXHistory) * 2; // Rychlost posouvání (* 2)
+    historyContainer.value.scrollLeft = scrollLeftHistory - walk;
+};
+
 onMounted(loadData);
 </script>
 
@@ -281,7 +305,7 @@ onMounted(loadData);
             
             <div class="lg:col-span-1 space-y-6">
                 <div class="bg-white rounded-xl shadow overflow-hidden"><StandingsTable :standings="standings" /></div>
-                <div class="bg-white rounded-xl shadow overflow-hidden p-4">
+                <!-- <div class="bg-white rounded-xl shadow overflow-hidden p-4">
                     <h3 class="font-bold text-gray-500 mb-2">Odehráno</h3>
                     <div class="max-h-96 overflow-y-auto space-y-2">
                         
@@ -304,7 +328,7 @@ onMounted(loadData);
 
                         </div>
                     </div>
-                </div>
+                </div> -->
             </div>
 
             <div class="xl:col-span-2 space-y-8">
@@ -416,6 +440,63 @@ onMounted(loadData);
                     </div>
                 </div>
 
+                <div>
+                    <h2 class="text-xl font-bold text-gray-700 mb-3 flex items-center gap-2">
+                        <span>✅</span> Odehráno
+                        <span class="text-sm font-normal text-gray-400 bg-gray-100 px-2 rounded-full">{{ finishedGames.length }}</span>
+                        <span class="text-xs text-gray-400 font-normal ml-2 hidden md:inline opacity-75">(Tažením posunete)</span>
+                    </h2>
+                    
+                    <div ref="historyContainer" 
+                        @mousedown="startDragHistory" 
+                        @mouseleave="stopDragHistory" 
+                        @mouseup="stopDragHistory" 
+                        @mousemove="doDragHistory"
+                        class="flex overflow-x-auto pb-6 gap-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent p-2 -ml-2 cursor-grab active:cursor-grabbing select-none transition-all"
+                        :class="{ 'scale-[0.99]': isDraggingHistory }">
+                        
+                        <div v-for="match in finishedGames.slice().reverse()" :key="match.id" 
+                            @click="!isDraggingHistory && openEditFinishedMatch(match)"
+                            class="flex-shrink-0 w-64 bg-white border border-gray-200 rounded-lg p-4 shadow-sm group hover:border-indigo-400 hover:shadow-md transition-all relative overflow-hidden"
+                            :class="isDraggingHistory ? 'pointer-events-none' : 'cursor-pointer'"
+                            title="Klikni pro opravu výsledku">
+                            
+                            <div class="flex justify-between text-xs text-gray-400 font-bold mb-3">
+                                <span>#{{ match.id }}</span>
+                                <span class="text-green-600 bg-green-50 px-1.5 py-0.5 rounded">HOTOVO</span>
+                            </div>
+
+                            <div class="flex items-center justify-between w-full font-bold text-gray-800 text-sm">
+                                
+                                <div class="truncate w-[35%] text-right" 
+                                    :class="{ 'text-green-700': match.score1 > match.score2, 'opacity-60': match.score1 < match.score2 }"
+                                    :title="match.player1.name">
+                                    {{ match.player1.name }}
+                                </div>
+
+                                <div class="bg-gray-100 px-2 py-1 rounded text-gray-900 mx-1 shrink-0">
+                                    {{ match.score1 }}:{{ match.score2 }}
+                                </div>
+
+                                <div class="truncate w-[35%] text-left"
+                                    :class="{ 'text-green-700': match.score2 > match.score1, 'opacity-60': match.score2 < match.score1 }"
+                                    :title="match.player2.name">
+                                    {{ match.player2.name }}
+                                </div>
+
+                            </div>
+
+                            <div class="absolute inset-x-0 bottom-0 bg-indigo-50 text-indigo-600 text-[10px] text-center py-1 opacity-0 group-hover:opacity-100 transition-opacity font-bold">
+                                Upravit výsledek ✏️
+                            </div>
+                        </div>
+                        
+                        <div v-if="finishedGames.length === 0" class="text-gray-400 italic pl-2 py-4 pointer-events-none">
+                            Zatím žádné odehrané zápasy.
+                        </div>
+
+                    </div>
+                </div>
             </div>
         </div>
 
