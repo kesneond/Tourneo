@@ -218,23 +218,29 @@ const historyContainer = ref(null);
 const isDraggingHistory = ref(false);
 let startXHistory = 0;
 let scrollLeftHistory = 0;
+let dragDistanceHistory = 0;
 
 const startDragHistory = (e) => {
     isDraggingHistory.value = true;
+    dragDistanceHistory = 0; // Vynulujeme vzdálenost při startu
     startXHistory = e.pageX - historyContainer.value.offsetLeft;
     scrollLeftHistory = historyContainer.value.scrollLeft;
-};
-
-const stopDragHistory = () => {
-    isDraggingHistory.value = false;
 };
 
 const doDragHistory = (e) => {
     if (!isDraggingHistory.value) return;
     e.preventDefault();
     const x = e.pageX - historyContainer.value.offsetLeft;
-    const walk = (x - startXHistory) * 2; // Rychlost posouvání (* 2)
+    const walk = (x - startXHistory) * 2;
+    
+    // Počítáme, jak daleko jsme myší ujeli
+    dragDistanceHistory = Math.abs(x - startXHistory);
+    
     historyContainer.value.scrollLeft = scrollLeftHistory - walk;
+};
+
+const stopDragHistory = () => {
+    isDraggingHistory.value = false;
 };
 
 const downloadExport = () => {
@@ -469,9 +475,9 @@ onMounted(loadData);
                         :class="{ 'scale-[0.99]': isDraggingHistory }">
                         
                         <div v-for="match in finishedGames.slice().reverse()" :key="match.id" 
-                            @click="!isDraggingHistory && openEditFinishedMatch(match)"
-                            class="flex-shrink-0 w-64 bg-white border border-gray-200 rounded-lg p-4 shadow-sm group hover:border-indigo-400 hover:shadow-md transition-all relative overflow-hidden"
-                            :class="isDraggingHistory ? 'pointer-events-none' : 'cursor-pointer'"
+                            @click="dragDistanceHistory < 5 && openEditFinishedMatch(match)"
+                            class="flex-shrink-0 w-64 hover:h-28 bg-white border border-gray-200 rounded-lg p-4 shadow-sm group hover:border-indigo-400 hover:shadow-md transition-all duration-300 ease-in-out relative overflow-hidden hover:scale-105 origin-center flex flex-col justify-center cursor-pointer"
+                            :class="{ 'select-none': isDraggingHistory }"
                             title="Klikni pro opravu výsledku">
                             
                             <div class="flex justify-between text-xs text-gray-400 font-bold mb-3">
