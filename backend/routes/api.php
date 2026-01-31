@@ -24,6 +24,7 @@ Route::post('/games/{game}/unassign', [GameController::class, 'unassignVenue']);
 
 // 4. Tabulka / Žebříček
 Route::get('/tournaments/{id}/standings', [TournamentController::class, 'standings']);
+Route::get('/tournaments/{tournament}/export', [TournamentController::class, 'export']);
 
 Route::get('/test-connection', function () {
     return response()->json(['message' => 'Spojení funguje! Laravel zdraví Vue.']);

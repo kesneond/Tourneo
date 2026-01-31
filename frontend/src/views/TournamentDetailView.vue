@@ -237,6 +237,19 @@ const doDragHistory = (e) => {
     historyContainer.value.scrollLeft = scrollLeftHistory - walk;
 };
 
+const downloadExport = () => {
+    // Vytvoříme odkaz přímo na API endpoint
+    // Protože používáme Laravel Sail/lokální server, cesta je obvykle:
+    // http://localhost/api/tournaments/{id}/export
+    
+    // Získáme base URL z API klienta nebo natvrdo (záleží jak máte nastavený axios)
+    // Nejjednodušší pro Vue + Laravel stack:
+    const exportUrl = `${import.meta.env.VITE_API_URL || 'http://localhost/api'}/tournaments/${route.params.id}/export`;
+    
+    // Otevření v novém okně spustí stahování
+    window.location.href = exportUrl;
+};
+
 onMounted(loadData);
 </script>
 
@@ -575,6 +588,11 @@ onMounted(loadData);
 
         </div>
     </div>
+    <button 
+        @click="downloadExport" 
+        class="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold shadow-sm transition-colors text-sm">
+        <span>📊</span> Exportovat data
+    </button>
 </template>
 
 <style scoped>
