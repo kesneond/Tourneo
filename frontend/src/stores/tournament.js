@@ -35,6 +35,17 @@ export const useTournamentStore = defineStore('tournament', () => {
         }
     };
 
+    const deleteTournament = async (id) => {
+        if (!confirm('Opravdu chcete smazat tento turnaj? Tato akce je nevratná.')) return;
+        
+        try {
+            await api.delete(`/tournaments/${id}`);
+            await fetchTournaments(); // Obnovit seznam po smazání
+        } catch (err) {
+            alert('Chyba při mazání: ' + err.message);
+        }
+    };
+
     // 3. Načíst detail (použijeme později)
     const fetchTournamentDetail = async (id) => {
         loading.value = true;
@@ -68,6 +79,7 @@ export const useTournamentStore = defineStore('tournament', () => {
         error,
         fetchTournaments,
         createTournament,
+        deleteTournament,
         fetchTournamentDetail,
         addPlayer,
         generateMatches

@@ -43,14 +43,30 @@ const saveScore = async (matchId) => {
             class="bg-white border rounded-lg p-4 flex flex-col sm:flex-row items-center justify-between shadow-sm hover:shadow transition-shadow">
             
             <div class="flex items-center justify-between w-full sm:w-auto sm:flex-1 gap-4 text-center sm:text-left">
-                <span class="font-medium text-gray-900 w-1/3 sm:text-right">{{ match.player1.name }}</span>
+    
+                <span class="w-1/3 sm:text-right transition-colors"
+                    :class="{
+                        'font-bold text-green-700': match.status === 'finished' && match.score1 > match.score2,
+                        'text-gray-500': match.status === 'finished' && match.score1 < match.score2,
+                        'font-medium text-gray-900': match.status !== 'finished' || match.score1 === match.score2
+                    }">
+                    {{ match.player1.name }}
+                </span>
                 
-                <div class="font-bold text-lg w-16 text-center bg-gray-100 rounded px-2 py-1">
+                <div class="font-bold text-lg w-20 text-center rounded px-2 py-1"
+                    :class="match.status === 'finished' ? 'bg-indigo-100 text-indigo-800' : 'bg-gray-100 text-gray-500'">
                     <span v-if="match.status === 'finished'">{{ match.score1 }} : {{ match.score2 }}</span>
-                    <span v-else class="text-gray-400 text-sm">VS</span>
+                    <span v-else class="text-xs uppercase tracking-wider">VS</span>
                 </div>
                 
-                <span class="font-medium text-gray-900 w-1/3">{{ match.player2.name }}</span>
+                <span class="w-1/3 transition-colors"
+                    :class="{
+                        'font-bold text-green-700': match.status === 'finished' && match.score2 > match.score1,
+                        'text-gray-500': match.status === 'finished' && match.score2 < match.score1,
+                        'font-medium text-gray-900': match.status !== 'finished' || match.score1 === match.score2
+                    }">
+                    {{ match.player2.name }}
+                </span>
             </div>
 
             <div class="mt-4 sm:mt-0 sm:ml-6 flex items-center">
