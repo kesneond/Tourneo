@@ -54,37 +54,70 @@ class TournamentController extends Controller
     }
 
     // --- LOGIKA GENEROVÁNÍ ZÁPASŮ (Round Robin) ---
-    public function generateGames($id)
+    public function generateGames($tournamentId)
     {
-        $tournament = Tournament::with('players')->findOrFail($id);
-
-        if ($tournament->players->count() < 2) {
-            return response()->json(['error' => 'Potřebujete alespoň 2 hráče.'], 400);
-        }
-
-        // Smazat staré zápasy, pokud existují (restart)
+        $tournament = Tournament::findOrFail($tournamentId);
+        
+        // Smažeme staré zápasy (pokud nějaké byly a generujeme znovu)
         $tournament->games()->delete();
 
         $players = $tournament->players;
-        $count = $players->count();
-        $gamesCreated = 0;
+        $playerIds = $players->pluck('id')->toArray();
+        $numPlayers = count($playerIds);
 
-        // Dvojitý cyklus: Každý s každým
-        for ($i = 0; $i < $count; $i++) {
-            for ($j = $i + 1; $j < $count; $j++) {
-                Game::create([
-                    'tournament_id' => $tournament->id,
-                    'player1_id' => $players[$i]->id,
-                    'player2_id' => $players[$j]->id,
-                    'status' => 'scheduled'
-                ]);
-                $gamesCreated++;
-            }
+        // Pokud je lichý počet, přidáme "fiktivního" hráče (null)
+        // Kdo hraje s "null", má v tom kole volno.
+        if ($numPlayers % 2 !== 0) {
+            array_push($playerIds, null);
+            $numPlayers++;
         }
 
+        $gamesData = [];
+        $totalRounds = $numPlayers - 1;
+        $matchesPerRound = $numPlayers / 2;
+
+        // --- GENERUJEME KOLA ---
+        for ($round = 0; $round < $totalRounds; $round++) {
+            
+            // --- GENERUJEME ZÁPASY V KOLE ---
+            for ($match = 0; $match < $matchesPerRound; $match++) {
+                $p1 = $playerIds[$match];
+                
+                // Soupeř je ten "naproti" v kruhu
+                $p2 = $playerIds[$numPlayers - 1 - $match];
+
+                // Pokud ani jeden není "fiktivní", vytvoříme zápas
+                if ($p1 !== null && $p2 !== null) {
+                    $gamesData[] = [
+                        'tournament_id' => $tournament->id,
+                        'player1_id' => $p1,
+                        'player2_id' => $p2,
+                        'status' => 'scheduled',
+                        'venue' => null, // Stůl se přiřadí až při hře
+                        'score1' => 0,
+                        'score2' => 0,
+                        // Přidáváme malý posun v čase, aby se zachovalo pořadí kol při řazení v DB
+                        'created_at' => now()->addSeconds($round * 60 + $match),
+                        'updated_at' => now(),
+                    ];
+                }
+            }
+
+            // --- ROTACE HRÁČŮ (Kouzlo kruhu) ---
+            // Hráč na indexu 0 (kotva) zůstává, zbytek se točí
+            $movingPlayers = array_splice($playerIds, 1); // Vezmeme všechny kromě prvního
+            $lastPlayer = array_pop($movingPlayers);      // Vezmeme posledního
+            array_unshift($movingPlayers, $lastPlayer);   // Dáme ho na začátek (za kotvu)
+            $playerIds = array_merge([$playerIds[0]], $movingPlayers); // Spojíme zpět
+        }
+
+        // Uložíme všechny zápasy najednou
+        \App\Models\Game::insert($gamesData);
+        
+        // Změníme status turnaje
         $tournament->update(['status' => 'in_progress']);
 
-        return response()->json(['message' => "Bylo vytvořeno $gamesCreated zápasů."]);
+        return response()->json(['message' => 'Rozlosováno spravedlivě!']);
     }
 
     // --- VÝPOČET TABULKY ---
