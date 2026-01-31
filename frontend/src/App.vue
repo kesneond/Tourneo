@@ -1,29 +1,28 @@
 <script setup>
-import { onMounted, ref } from 'vue';
-import api from '@/axios'; // Importujeme náš nakonfigurovaný axios
 import { RouterLink, RouterView } from 'vue-router'
-
-const status = ref('Zkouším se připojit...');
-
-onMounted(async () => {
-  try {
-    const response = await api.get('/test-connection');
-    status.value = '✅ ' + response.data.message;
-    console.log(response.data);
-  } catch (error) {
-    status.value = '❌ Chyba připojení: ' + error.message;
-    console.error(error);
-  }
-});
 </script>
 
 <template>
-  <h1>You did it!</h1>
-  <p>
-    <div class="bg-gray-200 p-2 text-center text-sm font-mono">
-      Status API: {{ status }}
-    </div>
-  </p>
-</template>
+  <div class="min-h-screen bg-gray-100 font-sans text-gray-900">
+    <header class="bg-blue-600 text-white shadow-md">
+      <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+        <RouterLink to="/" class="text-2xl font-bold hover:text-blue-100 transition">
+          🏆 Tourneo
+        </RouterLink>
 
-<style scoped></style>
+        <nav class="space-x-4">
+          <RouterLink to="/" class="hover:text-blue-200 font-medium">
+            Seznam turnajů
+          </RouterLink>
+          <RouterLink to="/create" class="bg-white text-blue-600 px-4 py-2 rounded-md font-bold hover:bg-blue-50 transition">
+            + Nový turnaj
+          </RouterLink>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-6">
+      <RouterView />
+    </main>
+  </div>
+</template>

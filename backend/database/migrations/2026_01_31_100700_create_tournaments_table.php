@@ -13,6 +13,15 @@ return new class extends Migration
     {
         Schema::create('tournaments', function (Blueprint $table) {
             $table->id();
+            
+            // --- TENTO ŘÁDEK TAM MUSÍ BÝT ---
+            $table->string('name'); 
+            // --------------------------------
+            
+            $table->text('description')->nullable();
+            $table->date('start_date')->nullable();
+            $table->string('format')->default('round_robin');
+            $table->string('status')->default('draft');
             $table->timestamps();
         });
     }

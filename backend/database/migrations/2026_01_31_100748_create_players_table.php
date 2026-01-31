@@ -13,6 +13,12 @@ return new class extends Migration
     {
         Schema::create('players', function (Blueprint $table) {
             $table->id();
+            
+            // --- TENTO ŘÁDEK TAM CHYBÍ NEBO NENÍ ULOŽENÝ ---
+            $table->foreignId('tournament_id')->constrained()->cascadeOnDelete();
+            // -----------------------------------------------
+
+            $table->string('name');
             $table->timestamps();
         });
     }
