@@ -67,8 +67,12 @@ export const useTournamentStore = defineStore('tournament', () => {
 
     // 5. Rozlosovat (použijeme později)
     const generateMatches = async (tournamentId) => {
-        await api.post(`/tournaments/${tournamentId}/generate`);
-        await fetchTournamentDetail(tournamentId);
+        try {
+            await api.post(`/tournaments/${tournamentId}/generate`);
+            await fetchTournamentDetail(tournamentId);
+        } catch (err) {
+            throw err;
+        }
     };
 
     // 6. Aktualizovat nastavení turnaje (např. počet stolů)

@@ -22,7 +22,8 @@ const isSubmitting = ref(false);
 const submitForm = async () => {
     isSubmitting.value = true;
     try {
-        await store.createTournament(form.value);
+        const data = { ...form.value };
+        await store.createTournament(data);
         router.push('/');
     } catch (error) {
         alert('Chyba: ' + error.message);
@@ -62,13 +63,16 @@ const submitForm = async () => {
                             class="block w-full rounded-lg border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm p-2.5 border" />
                     </div>
 
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Herní systém</label>
-                        <select v-model="form.format" 
-                            class="block w-full rounded-lg border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm p-2.5 border bg-white">
-                            <option value="round_robin">Každý s každým (Tabulka)</option>
-                            <option value="bracket" disabled>Pavouk (Již brzy)</option>
-                        </select>
+                    <div class="flex items-end gap-2">
+                        <div class="flex-1">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Herní systém</label>
+                            <select v-model="form.format" 
+                                class="block w-full rounded-lg border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm p-2.5 border bg-white">
+                                <option value="round_robin">Každý s každým (Tabulka)</option>
+                                <option value="groups">Skupiny</option>
+                                <option value="bracket" disabled>Pavouk (Již brzy)</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 

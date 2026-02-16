@@ -18,7 +18,8 @@ class Tournament extends Model
         'venues_count',
         'points_win',
         'points_draw',
-        'points_loss'
+        'points_loss',
+        'number_of_groups'
     ];
 
     public function players()
@@ -29,5 +30,10 @@ class Tournament extends Model
     public function games()
     {
         return $this->hasMany(Game::class);
+    }
+
+    public function groups()
+    {
+        return $this->hasMany(Group::class);
     }
 }

@@ -35,13 +35,38 @@ const beginMomentum = () => { cancelAnimationFrame(momentumID); const loop = () 
 const allGames = computed(() => tournament.value?.games || []);
 
 const finishedGames = computed(() => 
-    allGames.value.filter(g => g.status === 'finished').sort((a,b) => b.updated_at.localeCompare(a.updated_at))
+    allGames.value.filter(g => g.status === 'finished').sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at))
 );
 
-// Zápasy, které čekají ve frontě
+const groupedFinishedGames = computed(() => {
+    if (tournament.value?.format !== 'groups' || !tournament.value.groups) {
+        return [];
+    }
+    return tournament.value.groups.map(group => {
+        const gamesInGroup = allGames.value.filter(game => game.group_id === group.id && game.status === 'finished');
+        return {
+            ...group,
+            games: gamesInGroup.sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at)),
+        };
+    });
+});
+
 const queuedGames = computed(() => 
     allGames.value.filter(g => g.status === 'scheduled')
 );
+
+const groupedQueuedGames = computed(() => {
+    if (tournament.value?.format !== 'groups') {
+        return [];
+    }
+    const groups = tournament.value.groups || [];
+    return groups.map(group => {
+        return {
+            ...group,
+            games: allGames.value.filter(game => game.group_id === group.id && game.status === 'scheduled')
+        }
+    });
+});
 
 // --- OPRAVA: TOTO ZDE CHYBĚLO ---
 // Potřebujeme seznam běžících zápasů pro kontrolu kolizí hráčů
@@ -79,8 +104,12 @@ const loadData = async () => {
 
 const handleStartTournament = async () => {
     if (!confirm('Opravdu chcete začít turnaj?')) return;
-    await store.generateMatches(route.params.id);
-    await loadData();
+    try {
+        await store.generateMatches(route.params.id);
+        await loadData();
+    } catch (error) {
+        alert('Chyba při generování rozlosování: ' + (error.response?.data?.message || error.message));
+    }
 };
 
 const handleAddPlayer = async () => {
@@ -101,6 +130,13 @@ const handleAddPlayer = async () => {
     newPlayerName.value = '';
 };
 const updateVenues = async (e) => { const count = parseInt(e.target.value); if (count > 0) await store.updateTournament(tournament.value.id, { venues_count: count }); };
+
+const updateNumberOfGroups = async (e) => {
+    const count = parseInt(e.target.value);
+    if (count >= 2) {
+        await store.updateTournament(tournament.value.id, { number_of_groups: count });
+    }
+};
 
 // --- AKCE ---
 const openAssignModal = (venueNum) => {
@@ -278,7 +314,13 @@ onMounted(loadData);
         </div>
 
         <div v-if="tournament.status === 'draft'" class="bg-white rounded-xl shadow p-6">
-            <h2 class="text-xl font-bold mb-4">Registrace</h2>
+            <div class="flex justify-between items-center mb-4">
+              <h2 class="text-xl font-bold">Registrace</h2>
+                <div v-if="tournament.format === 'groups'" class="flex items-center gap-2">
+                    <label class="font-bold text-gray-700">Počet skupin:</label>
+                    <input type="number" min="2" :value="tournament.number_of_groups || 2" @change="updateNumberOfGroups" class="w-20 text-center font-bold text-lg border-2 border-indigo-200 bg-indigo-50 rounded py-1 focus:border-indigo-500 focus:ring-indigo-500" />
+                </div>
+            </div>
             <div class="flex gap-4 mb-4"><input v-model="newPlayerName" @keyup.enter="handleAddPlayer" class="border p-2 rounded flex-1" placeholder="Jméno" /><button @click="handleAddPlayer" class="bg-indigo-600 text-white px-4 rounded">Přidat</button></div>
             <div class="flex flex-wrap gap-2 mb-4">
                 <div v-for="p in tournament.players" :key="p.id" 
@@ -323,31 +365,14 @@ onMounted(loadData);
         <div v-else class="grid grid-cols-1 xl:grid-cols-3 gap-6">
             
             <div class="lg:col-span-1 space-y-6">
-                <div class="bg-white rounded-xl shadow overflow-hidden"><StandingsTable :standings="standings" /></div>
-                <!-- <div class="bg-white rounded-xl shadow overflow-hidden p-4">
-                    <h3 class="font-bold text-gray-500 mb-2">Odehráno</h3>
-                    <div class="max-h-96 overflow-y-auto space-y-2">
-                        
-                        <div v-for="m in finishedGames" :key="m.id" 
-                            @click="openEditFinishedMatch(m)"
-                            class="text-sm border-b pb-2 flex justify-between items-center group hover:bg-indigo-50 hover:text-indigo-900 p-2 rounded transition-colors cursor-pointer"
-                            title="Klikni pro úpravu výsledku">
-                            
-                            <span class="w-1/3 truncate text-right" :class="m.score1 > m.score2 ? 'font-bold text-green-700' : ''">
-                                {{ m.player1.name }}
-                            </span>
-                            
-                            <span class="font-bold px-2 py-0.5 bg-gray-100 group-hover:bg-white rounded text-gray-800 transition-colors">
-                                {{ m.score1 }}:{{ m.score2 }}
-                            </span>
-                            
-                            <span class="w-1/3 truncate text-left" :class="m.score2 > m.score1 ? 'font-bold text-green-700' : ''">
-                                {{ m.player2.name }}
-                            </span>
-
-                        </div>
+                <div v-if="tournament.format === 'round_robin'" class="bg-white rounded-xl shadow overflow-hidden">
+                    <StandingsTable :standings="standings" />
+                </div>
+                <div v-else class="space-y-6">
+                    <div v-for="group in standings" :key="group.name" class="bg-white rounded-xl shadow overflow-hidden">
+                        <StandingsTable :standings="group.standings" :title="group.name" />
                     </div>
-                </div> -->
+                </div>
             </div>
 
             <div class="xl:col-span-2 space-y-8">
@@ -424,96 +449,138 @@ onMounted(loadData);
                     </div>
                 </div>
 
-                <div>
-                    <h2 class="text-xl font-bold text-gray-700 mb-3 flex items-center gap-2">
-                        <span>⏳</span> Ve frontě 
-                        <span class="text-sm font-normal text-gray-400 bg-gray-100 px-2 rounded-full">{{ queuedGames.length }}</span>
-                        <span class="text-xs text-gray-400 font-normal ml-2 hidden md:inline opacity-75">(Tažením myši posunete)</span>
-                    </h2>
-                    
-                    <div ref="queueContainer" @mousedown="startDrag" @mouseleave="stopDrag" @mouseup="stopDrag" @mousemove="doDrag"
-                            class="flex overflow-x-auto pb-6 gap-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent cursor-grab active:cursor-grabbing select-none p-2 -ml-2 transition-all"
-                            :class="{ 'bg-gray-100 scale-[0.99] rounded-xl': isDragging }">
-                        
-                        <div v-for="match in queuedGames" :key="match.id" 
-                                class="flex-shrink-0 w-64 bg-white border border-gray-200 rounded-lg p-4 shadow-sm opacity-90 hover:opacity-100 transition-opacity pointer-events-none md:pointer-events-auto"
-                                :class="isDragging ? 'opacity-80' : ''">
-                            <div class="flex justify-between text-xs text-gray-400 font-bold mb-2">
-                                <span>#{{ match.id }}</span>
-                                <span>ČEKÁ</span>
-                            </div>
-                            <div class="flex items-center justify-center w-full gap-1 font-bold text-gray-800">
-                                <div class="truncate max-w-[45%] text-right" :title="match.player1.name">
-                                    {{ match.player1.name }}
-                                </div>
-                                <span class="text-gray-400 text-xs font-normal shrink-0">vs</span>
-                                <div class="truncate max-w-[45%] text-left" :title="match.player2.name">
-                                    {{ match.player2.name }}
+                <div v-if="queuedGames.length > 0">
+                    <div v-if="tournament.format === 'groups'">
+                        <div v-for="group in groupedQueuedGames" :key="group.id">
+                            <h2 class="text-xl font-bold text-gray-700 mb-3 flex items-center gap-2">
+                                <span>⏳</span> Fronta: {{ group.name }}
+                                <span class="text-sm font-normal text-gray-400 bg-gray-100 px-2 rounded-full">{{ group.games.length }}</span>
+                            </h2>
+                            <div class="flex overflow-x-auto pb-6 gap-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent cursor-grab active:cursor-grabbing select-none p-2 -ml-2 transition-all">
+                                <div v-for="match in group.games" :key="match.id" 
+                                        class="flex-shrink-0 w-64 bg-white border border-gray-200 rounded-lg p-4 shadow-sm opacity-90 hover:opacity-100 transition-opacity pointer-events-none md:pointer-events-auto">
+                                    <div class="flex justify-between text-xs text-gray-400 font-bold mb-2">
+                                        <span>#{{ match.id }}</span>
+                                        <span>ČEKÁ</span>
+                                    </div>
+                                    <div class="flex items-center justify-center w-full gap-1 font-bold text-gray-800">
+                                        <div class="truncate max-w-[45%] text-right" :title="match.player1.name">
+                                            {{ match.player1.name }}
+                                        </div>
+                                        <span class="text-gray-400 text-xs font-normal shrink-0">vs</span>
+                                        <div class="truncate max-w-[45%] text-left" :title="match.player2.name">
+                                            {{ match.player2.name }}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
+                    </div>
+                    <div v-else>
+                        <h2 class="text-xl font-bold text-gray-700 mb-3 flex items-center gap-2">
+                            <span>⏳</span> Ve frontě 
+                            <span class="text-sm font-normal text-gray-400 bg-gray-100 px-2 rounded-full">{{ queuedGames.length }}</span>
+                            <span class="text-xs text-gray-400 font-normal ml-2 hidden md:inline opacity-75">(Tažením myši posunete)</span>
+                        </h2>
                         
-                        <div v-if="queuedGames.length === 0" class="text-gray-400 italic pl-2 py-4">
-                            Fronta je prázdná.
+                        <div ref="queueContainer" @mousedown="startDrag" @mouseleave="stopDrag" @mouseup="stopDrag" @mousemove="doDrag"
+                                class="flex overflow-x-auto pb-6 gap-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent cursor-grab active:cursor-grabbing select-none p-2 -ml-2 transition-all"
+                                :class="{ 'bg-gray-100 scale-[0.99] rounded-xl': isDragging }">
+                            
+                            <div v-for="match in queuedGames" :key="match.id" 
+                                    class="flex-shrink-0 w-64 bg-white border border-gray-200 rounded-lg p-4 shadow-sm opacity-90 hover:opacity-100 transition-opacity pointer-events-none md:pointer-events-auto"
+                                    :class="isDragging ? 'opacity-80' : ''">
+                                <div class="flex justify-between text-xs text-gray-400 font-bold mb-2">
+                                    <span>#{{ match.id }}</span>
+                                    <span>ČEKÁ</span>
+                                </div>
+                                <div class="flex items-center justify-center w-full gap-1 font-bold text-gray-800">
+                                    <div class="truncate max-w-[45%] text-right" :title="match.player1.name">
+                                        {{ match.player1.name }}
+                                    </div>
+                                    <span class="text-gray-400 text-xs font-normal shrink-0">vs</span>
+                                    <div class="truncate max-w-[45%] text-left" :title="match.player2.name">
+                                        {{ match.player2.name }}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div v-if="queuedGames.length === 0" class="text-gray-400 italic pl-2 py-4">
+                                Fronta je prázdná.
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <div>
-                    <h2 class="text-xl font-bold text-gray-700 mb-3 flex items-center gap-2">
-                        <span>✅</span> Odehráno
-                        <span class="text-sm font-normal text-gray-400 bg-gray-100 px-2 rounded-full">{{ finishedGames.length }}</span>
-                        <span class="text-xs text-gray-400 font-normal ml-2 hidden md:inline opacity-75">(Tažením posunete)</span>
-                    </h2>
-                    
-                    <div ref="historyContainer" 
-                        @mousedown="startDragHistory" 
-                        @mouseleave="stopDragHistory" 
-                        @mouseup="stopDragHistory" 
-                        @mousemove="doDragHistory"
-                        class="flex overflow-x-auto pb-6 gap-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent p-2 -ml-2 cursor-grab active:cursor-grabbing select-none transition-all"
-                        :class="{ 'scale-[0.99]': isDraggingHistory }">
+                    <div v-if="tournament.format === 'groups'">
+                        <div v-for="group in groupedFinishedGames" :key="group.id" class="mb-8">
+                            <h2 class="text-xl font-bold text-gray-700 mb-3 flex items-center gap-2">
+                                <span>✅</span> Odehráno: {{ group.name }}
+                                <span class="text-sm font-normal text-gray-400 bg-gray-100 px-2 rounded-full">{{ group.games.length }}</span>
+                            </h2>
+                            <div class="flex overflow-x-auto pb-6 gap-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent p-2 -ml-2 cursor-grab active:cursor-grabbing select-none"
+                                @mousedown="startDragHistory" @mouseleave="stopDragHistory" @mouseup="stopDragHistory" @mousemove="doDragHistory">
+                                <div v-for="match in group.games" :key="match.id"
+                                    @click="dragDistanceHistory < 5 && openEditFinishedMatch(match)"
+                                    class="flex-shrink-0 w-64 hover:h-28 bg-white border border-gray-200 rounded-lg p-4 shadow-sm group hover:border-indigo-400 hover:shadow-md transition-all duration-300 ease-in-out relative overflow-hidden hover:scale-105 origin-center flex flex-col justify-center cursor-pointer"
+                                    title="Klikni pro opravu výsledku">
+                                    
+                                    <div class="flex justify-between text-xs text-gray-400 font-bold mb-3">
+                                        <span>#{{ match.id }}</span>
+                                        <span class="text-green-600 bg-green-50 px-1.5 py-0.5 rounded">HOTOVO</span>
+                                    </div>
+                                    <div class="flex items-center justify-between w-full font-bold text-gray-800 text-sm">
+                                        <div class="truncate w-[35%] text-right" :class="{ 'text-green-700': match.score1 > match.score2, 'opacity-60': match.score1 < match.score2 }" :title="match.player1.name">{{ match.player1.name }}</div>
+                                        <div class="bg-gray-100 px-2 py-1 rounded text-gray-900 mx-1 shrink-0">{{ match.score1 }}:{{ match.score2 }}</div>
+                                        <div class="truncate w-[35%] text-left" :class="{ 'text-green-700': match.score2 > match.score1, 'opacity-60': match.score2 < match.score1 }" :title="match.player2.name">{{ match.player2.name }}</div>
+                                    </div>
+                                    <div class="absolute inset-x-0 bottom-0 bg-indigo-50 text-indigo-600 text-[10px] text-center py-1 opacity-0 group-hover:opacity-100 transition-opacity font-bold">Upravit výsledek ✏️</div>
+                                </div>
+                                <div v-if="group.games.length === 0" class="text-gray-400 italic pl-2 py-4 pointer-events-none">V této skupině nebyly odehrány žádné zápasy.</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-else>
+                        <h2 class="text-xl font-bold text-gray-700 mb-3 flex items-center gap-2">
+                            <span>✅</span> Odehráno
+                            <span class="text-sm font-normal text-gray-400 bg-gray-100 px-2 rounded-full">{{ finishedGames.length }}</span>
+                            <span class="text-xs text-gray-400 font-normal ml-2 hidden md:inline opacity-75">(Tažením posunete)</span>
+                        </h2>
                         
-                        <div v-for="match in finishedGames.slice().reverse()" :key="match.id" 
-                            @click="dragDistanceHistory < 5 && openEditFinishedMatch(match)"
-                            class="flex-shrink-0 w-64 hover:h-28 bg-white border border-gray-200 rounded-lg p-4 shadow-sm group hover:border-indigo-400 hover:shadow-md transition-all duration-300 ease-in-out relative overflow-hidden hover:scale-105 origin-center flex flex-col justify-center cursor-pointer"
-                            :class="{ 'select-none': isDraggingHistory }"
-                            title="Klikni pro opravu výsledku">
+                        <div ref="historyContainer" 
+                            @mousedown="startDragHistory" 
+                            @mouseleave="stopDragHistory" 
+                            @mouseup="stopDragHistory" 
+                            @mousemove="doDragHistory"
+                            class="flex overflow-x-auto pb-6 gap-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent p-2 -ml-2 cursor-grab active:cursor-grabbing select-none transition-all"
+                            :class="{ 'scale-[0.99]': isDraggingHistory }">
                             
-                            <div class="flex justify-between text-xs text-gray-400 font-bold mb-3">
-                                <span>#{{ match.id }}</span>
-                                <span class="text-green-600 bg-green-50 px-1.5 py-0.5 rounded">HOTOVO</span>
-                            </div>
-
-                            <div class="flex items-center justify-between w-full font-bold text-gray-800 text-sm">
+                            <div v-for="match in finishedGames" :key="match.id" 
+                                @click="dragDistanceHistory < 5 && openEditFinishedMatch(match)"
+                                class="flex-shrink-0 w-64 hover:h-28 bg-white border border-gray-200 rounded-lg p-4 shadow-sm group hover:border-indigo-400 hover:shadow-md transition-all duration-300 ease-in-out relative overflow-hidden hover:scale-105 origin-center flex flex-col justify-center cursor-pointer"
+                                :class="{ 'select-none': isDraggingHistory }"
+                                title="Klikni pro opravu výsledku">
                                 
-                                <div class="truncate w-[35%] text-right" 
-                                    :class="{ 'text-green-700': match.score1 > match.score2, 'opacity-60': match.score1 < match.score2 }"
-                                    :title="match.player1.name">
-                                    {{ match.player1.name }}
+                                <div class="flex justify-between text-xs text-gray-400 font-bold mb-3">
+                                    <span>#{{ match.id }}</span>
+                                    <span class="text-green-600 bg-green-50 px-1.5 py-0.5 rounded">HOTOVO</span>
                                 </div>
 
-                                <div class="bg-gray-100 px-2 py-1 rounded text-gray-900 mx-1 shrink-0">
-                                    {{ match.score1 }}:{{ match.score2 }}
+                                <div class="flex items-center justify-between w-full font-bold text-gray-800 text-sm">
+                                    <div class="truncate w-[35%] text-right" :class="{ 'text-green-700': match.score1 > match.score2, 'opacity-60': match.score1 < match.score2 }" :title="match.player1.name">{{ match.player1.name }}</div>
+                                    <div class="bg-gray-100 px-2 py-1 rounded text-gray-900 mx-1 shrink-0">{{ match.score1 }}:{{ match.score2 }}</div>
+                                    <div class="truncate w-[35%] text-left" :class="{ 'text-green-700': match.score2 > match.score1, 'opacity-60': match.score2 < match.score1 }" :title="match.player2.name">{{ match.player2.name }}</div>
                                 </div>
 
-                                <div class="truncate w-[35%] text-left"
-                                    :class="{ 'text-green-700': match.score2 > match.score1, 'opacity-60': match.score2 < match.score1 }"
-                                    :title="match.player2.name">
-                                    {{ match.player2.name }}
-                                </div>
-
+                                <div class="absolute inset-x-0 bottom-0 bg-indigo-50 text-indigo-600 text-[10px] text-center py-1 opacity-0 group-hover:opacity-100 transition-opacity font-bold">Upravit výsledek ✏️</div>
+                            </div>
+                            
+                            <div v-if="finishedGames.length === 0" class="text-gray-400 italic pl-2 py-4 pointer-events-none">
+                                Zatím žádné odehrané zápasy.
                             </div>
 
-                            <div class="absolute inset-x-0 bottom-0 bg-indigo-50 text-indigo-600 text-[10px] text-center py-1 opacity-0 group-hover:opacity-100 transition-opacity font-bold">
-                                Upravit výsledek ✏️
-                            </div>
                         </div>
-                        
-                        <div v-if="finishedGames.length === 0" class="text-gray-400 italic pl-2 py-4 pointer-events-none">
-                            Zatím žádné odehrané zápasy.
-                        </div>
-
                     </div>
                 </div>
             </div>
@@ -530,30 +597,63 @@ onMounted(loadData);
                     <div v-if="queuedGames.length === 0" class="text-center py-10 text-gray-500">
                         Žádné zápasy ve frontě.
                     </div>
-                    <div v-else class="grid gap-2 p-2">
-                        <button v-for="match in queuedGames" :key="match.id" 
-                            @click="!getMatchConflictReason(match) && assignMatchToVenue(match.id)"
-                            :disabled="!!getMatchConflictReason(match)"
-                            class="flex items-center justify-between p-4 rounded-lg border transition-all group text-left relative overflow-hidden shadow-sm"
-                            :class="getMatchConflictReason(match) 
-                                ? 'bg-gray-100 border-gray-200 opacity-60 cursor-not-allowed grayscale' 
-                                : 'bg-white border-gray-200 hover:border-indigo-500 hover:bg-indigo-50 hover:shadow-md cursor-pointer'"
-                        >
-                            <div class="flex-1">
-                                <div class="font-bold text-lg" :class="getMatchConflictReason(match) ? 'text-gray-500' : 'text-gray-800 group-hover:text-indigo-700'">
-                                    {{ match.player1.name }} <span class="text-gray-400 font-normal text-sm">vs</span> {{ match.player2.name }}
+                    <div v-else>
+                        <div v-if="tournament.format === 'groups'">
+                             <div v-for="group in groupedQueuedGames" :key="group.id" class="p-2">
+                                <h4 class="font-bold text-indigo-800 bg-indigo-100 px-3 py-2 rounded-lg text-sm sticky top-0">
+                                    {{ group.name }}
+                                </h4>
+                                <div class="grid gap-2 pt-3">
+                                    <button v-for="match in group.games" :key="match.id" 
+                                        @click="!getMatchConflictReason(match) && assignMatchToVenue(match.id)"
+                                        :disabled="!!getMatchConflictReason(match)"
+                                        class="flex items-center justify-between p-4 rounded-lg border transition-all group text-left relative overflow-hidden shadow-sm"
+                                        :class="getMatchConflictReason(match) 
+                                            ? 'bg-gray-100 border-gray-200 opacity-60 cursor-not-allowed grayscale' 
+                                            : 'bg-white border-gray-200 hover:border-indigo-500 hover:bg-indigo-50 hover:shadow-md cursor-pointer'">
+                                        <!-- ... obsah tlačítka ... -->
+                                        <div class="flex-1">
+                                            <div class="font-bold text-lg" :class="getMatchConflictReason(match) ? 'text-gray-500' : 'text-gray-800 group-hover:text-indigo-700'">
+                                                {{ match.player1.name }} <span class="text-gray-400 font-normal text-sm">vs</span> {{ match.player2.name }}
+                                            </div>
+                                            <div class="text-xs text-gray-400 mt-1">ID zápasu: #{{ match.id }}</div>
+                                            <div v-if="getMatchConflictReason(match)" class="text-xs text-red-500 font-bold mt-2 flex items-center gap-1 bg-red-50 p-1 rounded w-fit px-2">
+                                                <span>⛔</span> {{ getMatchConflictReason(match) }} je zaneprázdněn
+                                            </div>
+                                        </div>
+                                        <div v-if="!getMatchConflictReason(match)" class="bg-indigo-100 text-indigo-600 w-8 h-8 flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 transition-all transform group-hover:translate-x-0 translate-x-2">➤</div>
+                                    </button>
                                 </div>
-                                <div class="text-xs text-gray-400 mt-1">ID zápasu: #{{ match.id }}</div>
-                                
-                                <div v-if="getMatchConflictReason(match)" class="text-xs text-red-500 font-bold mt-2 flex items-center gap-1 bg-red-50 p-1 rounded w-fit px-2">
-                                    <span>⛔</span> {{ getMatchConflictReason(match) }} je zaneprázdněn
+                                <div v-if="group.games.length === 0" class="text-center py-4 text-sm text-gray-400 italic">
+                                    V této skupině nejsou žádné zápasy ve frontě.
                                 </div>
                             </div>
+                        </div>
+                        <div v-else class="grid gap-2 p-2">
+                            <button v-for="match in queuedGames" :key="match.id" 
+                                @click="!getMatchConflictReason(match) && assignMatchToVenue(match.id)"
+                                :disabled="!!getMatchConflictReason(match)"
+                                class="flex items-center justify-between p-4 rounded-lg border transition-all group text-left relative overflow-hidden shadow-sm"
+                                :class="getMatchConflictReason(match) 
+                                    ? 'bg-gray-100 border-gray-200 opacity-60 cursor-not-allowed grayscale' 
+                                    : 'bg-white border-gray-200 hover:border-indigo-500 hover:bg-indigo-50 hover:shadow-md cursor-pointer'"
+                            >
+                                <div class="flex-1">
+                                    <div class="font-bold text-lg" :class="getMatchConflictReason(match) ? 'text-gray-500' : 'text-gray-800 group-hover:text-indigo-700'">
+                                        {{ match.player1.name }} <span class="text-gray-400 font-normal text-sm">vs</span> {{ match.player2.name }}
+                                    </div>
+                                    <div class="text-xs text-gray-400 mt-1">ID zápasu: #{{ match.id }}</div>
+                                    
+                                    <div v-if="getMatchConflictReason(match)" class="text-xs text-red-500 font-bold mt-2 flex items-center gap-1 bg-red-50 p-1 rounded w-fit px-2">
+                                        <span>⛔</span> {{ getMatchConflictReason(match) }} je zaneprázdněn
+                                    </div>
+                                </div>
 
-                            <div v-if="!getMatchConflictReason(match)" class="bg-indigo-100 text-indigo-600 w-8 h-8 flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 transition-all transform group-hover:translate-x-0 translate-x-2">
-                                ➤
-                            </div>
-                        </button>
+                                <div v-if="!getMatchConflictReason(match)" class="bg-indigo-100 text-indigo-600 w-8 h-8 flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 transition-all transform group-hover:translate-x-0 translate-x-2">
+                                    ➤
+                                </div>
+                            </button>
+                        </div>
                     </div>
                 </div>
                 
