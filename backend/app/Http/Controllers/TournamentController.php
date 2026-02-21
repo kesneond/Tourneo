@@ -40,6 +40,12 @@ class TournamentController extends Controller
             // Zde můžete přidat validaci i pro name, description atd., pokud byste je chtěl editovat
         ]);
 
+        if (array_key_exists('number_of_groups', $validated) && $validated['number_of_groups'] % 2 !== 0) {
+            return response()->json([
+                'message' => 'Počet skupin musí být sudý (minimálně 2).'
+            ], 422);
+        }
+
         $tournament->update($validated);
 
         return response()->json($tournament);
@@ -79,6 +85,9 @@ class TournamentController extends Controller
         if ($tournament->format === 'groups') {
             if (!$tournament->number_of_groups || $tournament->number_of_groups < 2) {
                 return response()->json(['message' => 'Pro turnaj ve skupinách musí být nastaven počet skupin (minimálně 2).'], 422);
+            }
+            if ($tournament->number_of_groups % 2 !== 0) {
+                return response()->json(['message' => 'Počet skupin musí být sudý (minimálně 2).'], 422);
             }
             $this->generateGroups($tournament);
         } else {

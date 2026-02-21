@@ -51,6 +51,16 @@ const groupedFinishedGames = computed(() => {
     });
 });
 
+const playoffGames = computed(() =>
+    allGames.value.filter(g => g.group_id === null)
+);
+
+const playoffFinishedGames = computed(() =>
+    playoffGames.value
+        .filter(g => g.status === 'finished')
+        .sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at))
+);
+
 const queuedGames = computed(() => 
     allGames.value.filter(g => g.status === 'scheduled')
 );
@@ -66,6 +76,227 @@ const groupedQueuedGames = computed(() => {
             games: allGames.value.filter(game => game.group_id === group.id && game.status === 'scheduled')
         }
     });
+});
+
+const playoffQueuedGames = computed(() =>
+    playoffGames.value.filter(g => g.status === 'scheduled')
+);
+
+const getRoundLabel = (gamesCount) => {
+    switch (gamesCount) {
+        case 1:
+            return 'Finále';
+        case 2:
+            return 'Semifinále';
+        case 4:
+            return 'Čtvrtfinále';
+        case 8:
+            return 'Osmifinále';
+        case 16:
+            return 'Šestnáctifinále';
+        default:
+            return `Kolo (${gamesCount} zápasů)`;
+    }
+};
+
+const playoffRoundMeta = computed(() => {
+    const rounds = {};
+
+    playoffGames.value.forEach(game => {
+        const round = game.round || 1;
+        if (!rounds[round]) {
+            rounds[round] = [];
+        }
+        rounds[round].push(game);
+    });
+
+    const orderedRounds = Object.entries(rounds)
+        .map(([round, roundGames]) => ({
+            round: Number(round),
+            games: [...roundGames].sort((a, b) => new Date(a.created_at) - new Date(b.created_at) || a.id - b.id)
+        }))
+        .sort((a, b) => a.round - b.round);
+
+    const metaByRound = {};
+
+    orderedRounds.forEach((roundData, index) => {
+        const previousRound = index > 0 ? orderedRounds[index - 1] : null;
+        const totalGames = roundData.games.length;
+        const isMedalRound = totalGames === 2 && (previousRound?.games.length ?? 0) === 2;
+        const matchLabels = {};
+
+        if (isMedalRound) {
+            if (roundData.games[0]) {
+                matchLabels[roundData.games[0].id] = 'Finále';
+            }
+            if (roundData.games[1]) {
+                matchLabels[roundData.games[1].id] = 'O 3. místo';
+            }
+        }
+
+        metaByRound[roundData.round] = {
+            totalGames,
+            isMedalRound,
+            label: isMedalRound ? 'Finále + o 3. místo' : getRoundLabel(totalGames),
+            matchLabels
+        };
+    });
+
+    return metaByRound;
+});
+
+const groupPlayoffGamesByRound = (games) => {
+    const rounds = {};
+    games.forEach(game => {
+        const round = game.round || 1;
+        if (!rounds[round]) {
+            rounds[round] = [];
+        }
+        rounds[round].push(game);
+    });
+
+    const orderedRounds = Object.entries(rounds)
+        .map(([round, roundGames]) => ({
+            round: Number(round),
+            games: [...roundGames].sort((a, b) => new Date(a.created_at) - new Date(b.created_at) || a.id - b.id)
+        }))
+        .sort((a, b) => a.round - b.round);
+
+    return orderedRounds.map((roundData) => {
+        const meta = playoffRoundMeta.value[roundData.round] || {};
+        return {
+            ...roundData,
+            label: meta.label || getRoundLabel(roundData.games.length),
+            isMedalRound: Boolean(meta.isMedalRound),
+            matchLabels: meta.matchLabels || {}
+        };
+    });
+};
+
+const playoffQueuedByRound = computed(() => groupPlayoffGamesByRound(playoffQueuedGames.value));
+const playoffFinishedByRound = computed(() =>
+    [...groupPlayoffGamesByRound(playoffFinishedGames.value)].sort((a, b) => b.round - a.round)
+);
+const playoffQueuedCount = computed(() => playoffQueuedGames.value.length);
+const playoffFinishedCount = computed(() => playoffFinishedGames.value.length);
+const medalSections = ['Finále', 'O 3. místo'];
+const getMedalMatch = (round, sectionLabel) =>
+    round.games.find(match => round.matchLabels?.[match.id] === sectionLabel) || null;
+
+const finalStandings = computed(() => {
+    if (!tournament.value || tournament.value.status !== 'finished') {
+        return [];
+    }
+
+    let baseStandings = [];
+
+    if (tournament.value.format === 'groups') {
+        baseStandings = (standings.value || [])
+            .flatMap(group => group.standings || []);
+    } else {
+        baseStandings = standings.value || [];
+    }
+
+    if (!baseStandings.length) {
+        return [];
+    }
+
+    const playRounds = new Map();
+    const placementRank = new Map();
+
+    const rounds = {};
+    playoffFinishedGames.value.forEach(game => {
+        const round = game.round || 1;
+        if (!rounds[round]) {
+            rounds[round] = [];
+        }
+        rounds[round].push(game);
+    });
+
+    const orderedRounds = Object.entries(rounds)
+        .map(([round, games]) => ({
+            round: Number(round),
+            games: [...games].sort((a, b) => new Date(a.created_at) - new Date(b.created_at) || a.id - b.id)
+        }))
+        .sort((a, b) => a.round - b.round);
+
+    const medalRound = orderedRounds.find((roundData, index) =>
+        roundData.games.length === 2 && index > 0 && orderedRounds[index - 1].games.length === 2
+    );
+
+    let finalGameId = null;
+    let thirdPlaceGameId = null;
+
+    if (medalRound) {
+        finalGameId = medalRound.games[0]?.id ?? null;
+        thirdPlaceGameId = medalRound.games[1]?.id ?? null;
+
+        const finalGame = medalRound.games[0];
+        if (finalGame && finalGame.score1 !== finalGame.score2) {
+            const finalWinnerId = finalGame.score1 > finalGame.score2 ? finalGame.player1_id : finalGame.player2_id;
+            const finalLoserId = finalGame.score1 > finalGame.score2 ? finalGame.player2_id : finalGame.player1_id;
+            placementRank.set(finalWinnerId, 4); // 1. místo
+            placementRank.set(finalLoserId, 3); // 2. místo
+        }
+
+        const thirdPlaceGame = medalRound.games[1];
+        if (thirdPlaceGame && thirdPlaceGame.score1 !== thirdPlaceGame.score2) {
+            const thirdWinnerId = thirdPlaceGame.score1 > thirdPlaceGame.score2 ? thirdPlaceGame.player1_id : thirdPlaceGame.player2_id;
+            const thirdLoserId = thirdPlaceGame.score1 > thirdPlaceGame.score2 ? thirdPlaceGame.player2_id : thirdPlaceGame.player1_id;
+            placementRank.set(thirdWinnerId, 2); // 3. místo
+            placementRank.set(thirdLoserId, 1); // 4. místo
+        }
+    }
+
+    playoffFinishedGames.value.forEach(game => {
+        if (!game.player1 || !game.player2) {
+            return;
+        }
+
+        if (game.score1 === game.score2) {
+            return;
+        }
+
+        // Zápas o 3. místo neovlivňuje "postup do kola", ten byl určen v semifinále.
+        if (thirdPlaceGameId && game.id === thirdPlaceGameId) {
+            return;
+        }
+
+        const round = game.round || 1;
+        const winnerId = game.score1 > game.score2 ? game.player1_id : game.player2_id;
+        const loserId = game.score1 > game.score2 ? game.player2_id : game.player1_id;
+
+        const currentWinnerRound = playRounds.get(winnerId) || 0;
+        playRounds.set(winnerId, Math.max(currentWinnerRound, round));
+
+        const defaultLoserRound = finalGameId && game.id === finalGameId ? round - 1 : round - 1;
+        if (!playRounds.has(loserId)) {
+            playRounds.set(loserId, defaultLoserRound);
+        }
+    });
+
+    return baseStandings
+        .filter(player => player.name !== '__BYE__')
+        .map(player => ({
+            ...player,
+            placement_rank: placementRank.get(player.id) || 0,
+            playoff_round: playRounds.get(player.id) ?? -1
+        }))
+        .sort((a, b) => {
+            if (a.placement_rank !== b.placement_rank) {
+                return b.placement_rank - a.placement_rank;
+            }
+            if (a.playoff_round !== b.playoff_round) {
+                return b.playoff_round - a.playoff_round;
+            }
+            if (a.points !== b.points) {
+                return b.points - a.points;
+            }
+            if (a.score_diff !== b.score_diff) {
+                return b.score_diff - a.score_diff;
+            }
+            return 0;
+        });
 });
 
 // --- OPRAVA: TOTO ZDE CHYBĚLO ---
@@ -133,9 +364,15 @@ const updateVenues = async (e) => { const count = parseInt(e.target.value); if (
 
 const updateNumberOfGroups = async (e) => {
     const count = parseInt(e.target.value);
-    if (count >= 2) {
-        await store.updateTournament(tournament.value.id, { number_of_groups: count });
+    if (Number.isNaN(count)) {
+        return;
     }
+    if (count < 2 || count % 2 !== 0) {
+        alert('Počet skupin musí být sudý (minimálně 2).');
+        e.target.value = tournament.value?.number_of_groups || 2;
+        return;
+    }
+    await store.updateTournament(tournament.value.id, { number_of_groups: count });
 };
 
 // --- AKCE ---
@@ -159,6 +396,11 @@ const cancelEditing = () => { editingMatchId.value = null; };
 const saveScore = async (matchId) => {
     saving.value = true;
     try {
+        const match = allGames.value.find(g => g.id === matchId);
+        if (match?.group_id === null && tempScore1.value === tempScore2.value) {
+            alert('Zápas v pavouku nesmí skončit remízou.');
+            return;
+        }
         await api.put(`/games/${matchId}`, { score1: tempScore1.value, score2: tempScore2.value });
         editingMatchId.value = null;
         await loadData();
@@ -194,6 +436,10 @@ const saveFinishedMatch = async () => {
     if (!editingFinishedMatch.value) return;
     
     try {
+        if (editingFinishedMatch.value.group_id === null && editScore1.value === editScore2.value) {
+            alert('Zápas v pavouku nesmí skončit remízou.');
+            return;
+        }
         // Použijeme stejný endpoint jako pro normální ukládání
         await api.put(`/games/${editingFinishedMatch.value.id}`, {
             score1: editScore1.value,
@@ -315,10 +561,15 @@ onMounted(loadData);
 
         <div v-if="tournament.status === 'draft'" class="bg-white rounded-xl shadow p-6">
             <div class="flex justify-between items-center mb-4">
-              <h2 class="text-xl font-bold">Registrace</h2>
+              <div class="flex items-center gap-3">
+                <h2 class="text-xl font-bold">Registrace</h2>
+                <span class="text-xs font-bold text-indigo-700 bg-indigo-100 px-2 py-1 rounded-full">
+                    Hráči: {{ tournament.players.length }}
+                </span>
+              </div>
                 <div v-if="tournament.format === 'groups'" class="flex items-center gap-2">
                     <label class="font-bold text-gray-700">Počet skupin:</label>
-                    <input type="number" min="2" :value="tournament.number_of_groups || 2" @change="updateNumberOfGroups" class="w-20 text-center font-bold text-lg border-2 border-indigo-200 bg-indigo-50 rounded py-1 focus:border-indigo-500 focus:ring-indigo-500" />
+                    <input type="number" min="2" step="2" :value="tournament.number_of_groups || 2" @change="updateNumberOfGroups" class="w-20 text-center font-bold text-lg border-2 border-indigo-200 bg-indigo-50 rounded py-1 focus:border-indigo-500 focus:ring-indigo-500" />
                 </div>
             </div>
             <div class="flex gap-4 mb-4"><input v-model="newPlayerName" @keyup.enter="handleAddPlayer" class="border p-2 rounded flex-1" placeholder="Jméno" /><button @click="handleAddPlayer" class="bg-indigo-600 text-white px-4 rounded">Přidat</button></div>
@@ -365,6 +616,10 @@ onMounted(loadData);
         <div v-else class="grid grid-cols-1 xl:grid-cols-3 gap-6">
             
             <div class="lg:col-span-1 space-y-6">
+                <div v-if="tournament.status === 'finished' && finalStandings.length" class="bg-white rounded-xl shadow overflow-hidden">
+                    <div class="px-4 py-3 border-b border-gray-100 bg-emerald-50 text-emerald-800 font-bold">Konečné pořadí</div>
+                    <StandingsTable :standings="finalStandings" />
+                </div>
                 <div v-if="tournament.format === 'round_robin'" class="bg-white rounded-xl shadow overflow-hidden">
                     <StandingsTable :standings="standings" />
                 </div>
@@ -451,6 +706,53 @@ onMounted(loadData);
 
                 <div v-if="queuedGames.length > 0">
                     <div v-if="tournament.format === 'groups'">
+                        <div v-if="playoffQueuedByRound.length > 0" class="mb-6">
+                            <h2 class="text-xl font-bold text-gray-700 mb-3 flex items-center gap-2">
+                                <span>🏆</span> Pavouk
+                                <span class="text-sm font-normal text-gray-400 bg-gray-100 px-2 rounded-full">{{ playoffQueuedCount }}</span>
+                            </h2>
+                            <div v-for="round in playoffQueuedByRound" :key="round.round" class="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-white p-4 shadow-sm mb-4">
+                                <div class="flex items-center justify-between mb-4">
+                                    <div class="text-xs font-semibold text-indigo-700 uppercase tracking-[0.2em]">{{ round.label }}</div>
+                                    <div class="text-xs font-bold text-indigo-500 bg-indigo-100 px-2 py-1 rounded-full">Čeká</div>
+                                </div>
+                                <div v-if="!round.isMedalRound" class="relative">
+                                    <div class="absolute left-4 top-0 bottom-0 w-px bg-indigo-200/80"></div>
+                                    <div class="space-y-4 pl-8">
+                                        <div v-for="(match, index) in round.games" :key="match.id" class="relative">
+                                            <div class="absolute -left-6 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-indigo-500 shadow ring-4 ring-indigo-100"></div>
+                                            <div class="rounded-xl border border-indigo-100 bg-white/90 p-4 shadow-sm">
+                                                <div class="flex justify-between text-[11px] text-indigo-400 font-bold mb-2 uppercase">
+                                                    <span>{{ round.matchLabels[match.id] || `Duel ${index + 1}` }}</span>
+                                                    <span>#{{ match.id }}</span>
+                                                </div>
+                                                <div class="flex items-center justify-between text-sm font-bold text-gray-800">
+                                                    <div class="truncate w-[42%] text-right" :title="match.player1.name">{{ match.player1.name }}</div>
+                                                    <span class="text-xs text-indigo-400 font-semibold">vs</span>
+                                                    <div class="truncate w-[42%] text-left" :title="match.player2.name">{{ match.player2.name }}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div v-else class="grid md:grid-cols-2 gap-4">
+                                    <div v-for="sectionLabel in medalSections" :key="`${round.round}-${sectionLabel}`" class="rounded-xl border border-indigo-100 bg-white/90 p-4 shadow-sm">
+                                        <div class="text-xs font-semibold text-indigo-600 uppercase tracking-[0.18em] mb-3">{{ sectionLabel }}</div>
+                                        <div v-if="getMedalMatch(round, sectionLabel)" class="space-y-1">
+                                            <div class="flex justify-between text-[11px] text-indigo-400 font-bold uppercase">
+                                                <span>#{{ getMedalMatch(round, sectionLabel).id }}</span>
+                                                <span>Čeká</span>
+                                            </div>
+                                            <div class="flex items-center justify-between text-sm font-bold text-gray-800">
+                                                <div class="truncate w-[42%] text-right" :title="getMedalMatch(round, sectionLabel).player1.name">{{ getMedalMatch(round, sectionLabel).player1.name }}</div>
+                                                <span class="text-xs text-indigo-400 font-semibold">vs</span>
+                                                <div class="truncate w-[42%] text-left" :title="getMedalMatch(round, sectionLabel).player2.name">{{ getMedalMatch(round, sectionLabel).player2.name }}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                         <div v-for="group in groupedQueuedGames" :key="group.id">
                             <h2 class="text-xl font-bold text-gray-700 mb-3 flex items-center gap-2">
                                 <span>⏳</span> Fronta: {{ group.name }}
@@ -514,6 +816,74 @@ onMounted(loadData);
 
                 <div>
                     <div v-if="tournament.format === 'groups'">
+                        <div v-if="playoffFinishedByRound.length > 0" class="mb-8">
+                            <h2 class="text-xl font-bold text-gray-700 mb-3 flex items-center gap-2">
+                                <span>🏆</span> Pavouk odehráno
+                                <span class="text-sm font-normal text-gray-400 bg-gray-100 px-2 rounded-full">{{ playoffFinishedCount }}</span>
+                            </h2>
+                            <div v-for="round in playoffFinishedByRound" :key="round.round" class="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-white p-4 shadow-sm mb-4"
+                                @mousedown="startDragHistory" @mouseleave="stopDragHistory" @mouseup="stopDragHistory" @mousemove="doDragHistory">
+                                <div class="flex items-center justify-between mb-4">
+                                    <div class="text-xs font-semibold text-emerald-700 uppercase tracking-[0.2em]">{{ round.label }}</div>
+                                    <div class="text-xs font-bold text-emerald-600 bg-emerald-100 px-2 py-1 rounded-full">Hotovo</div>
+                                </div>
+                                <div v-if="!round.isMedalRound" class="relative">
+                                    <div class="absolute left-4 top-0 bottom-0 w-px bg-emerald-200/80"></div>
+                                    <div class="space-y-4 pl-8">
+                                        <div v-for="(match, index) in round.games" :key="match.id" class="relative"
+                                            @click="dragDistanceHistory < 5 && openEditFinishedMatch(match)">
+                                            <div class="absolute -left-6 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-emerald-500 shadow ring-4 ring-emerald-100"></div>
+                                            <div class="rounded-xl border border-emerald-100 bg-white/90 p-4 shadow-sm cursor-pointer hover:shadow-md transition">
+                                                <div class="flex justify-between text-[11px] text-emerald-400 font-bold mb-2 uppercase">
+                                                    <span>{{ round.matchLabels[match.id] || `Duel ${index + 1}` }}</span>
+                                                    <span>#{{ match.id }}</span>
+                                                </div>
+                                                <div class="flex items-center justify-between w-full text-sm font-bold text-gray-800">
+                                                    <div class="truncate w-[35%] text-right" :class="{ 'text-emerald-700': match.score1 > match.score2, 'opacity-60': match.score1 < match.score2 }" :title="match.player1.name">{{ match.player1.name }}</div>
+                                                    <div class="bg-emerald-50 px-2 py-1 rounded text-emerald-800 mx-1 shrink-0">{{ match.score1 }}:{{ match.score2 }}</div>
+                                                    <div class="truncate w-[35%] text-left" :class="{ 'text-emerald-700': match.score2 > match.score1, 'opacity-60': match.score2 < match.score1 }" :title="match.player2.name">{{ match.player2.name }}</div>
+                                                </div>
+                                                <div class="text-[10px] text-emerald-500 font-bold mt-2 uppercase tracking-widest">Klikni pro úpravu</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div v-else class="grid md:grid-cols-2 gap-4">
+                                    <div
+                                        v-for="sectionLabel in medalSections"
+                                        :key="`${round.round}-finished-${sectionLabel}`"
+                                        class="rounded-xl border border-emerald-100 bg-white/90 p-4 shadow-sm cursor-pointer hover:shadow-md transition"
+                                        @click="dragDistanceHistory < 5 && getMedalMatch(round, sectionLabel) && openEditFinishedMatch(getMedalMatch(round, sectionLabel))"
+                                    >
+                                        <div class="text-xs font-semibold text-emerald-600 uppercase tracking-[0.18em] mb-3">{{ sectionLabel }}</div>
+                                        <div v-if="getMedalMatch(round, sectionLabel)" class="space-y-1">
+                                            <div class="flex justify-between text-[11px] text-emerald-400 font-bold uppercase">
+                                                <span>#{{ getMedalMatch(round, sectionLabel).id }}</span>
+                                                <span>Hotovo</span>
+                                            </div>
+                                            <div class="flex items-center justify-between w-full text-sm font-bold text-gray-800">
+                                                <div
+                                                    class="truncate w-[35%] text-right"
+                                                    :class="{ 'text-emerald-700': getMedalMatch(round, sectionLabel).score1 > getMedalMatch(round, sectionLabel).score2, 'opacity-60': getMedalMatch(round, sectionLabel).score1 < getMedalMatch(round, sectionLabel).score2 }"
+                                                    :title="getMedalMatch(round, sectionLabel).player1.name"
+                                                >
+                                                    {{ getMedalMatch(round, sectionLabel).player1.name }}
+                                                </div>
+                                                <div class="bg-emerald-50 px-2 py-1 rounded text-emerald-800 mx-1 shrink-0">{{ getMedalMatch(round, sectionLabel).score1 }}:{{ getMedalMatch(round, sectionLabel).score2 }}</div>
+                                                <div
+                                                    class="truncate w-[35%] text-left"
+                                                    :class="{ 'text-emerald-700': getMedalMatch(round, sectionLabel).score2 > getMedalMatch(round, sectionLabel).score1, 'opacity-60': getMedalMatch(round, sectionLabel).score2 < getMedalMatch(round, sectionLabel).score1 }"
+                                                    :title="getMedalMatch(round, sectionLabel).player2.name"
+                                                >
+                                                    {{ getMedalMatch(round, sectionLabel).player2.name }}
+                                                </div>
+                                            </div>
+                                            <div class="text-[10px] text-emerald-500 font-bold mt-2 uppercase tracking-widest">Klikni pro úpravu</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                         <div v-for="group in groupedFinishedGames" :key="group.id" class="mb-8">
                             <h2 class="text-xl font-bold text-gray-700 mb-3 flex items-center gap-2">
                                 <span>✅</span> Odehráno: {{ group.name }}
@@ -599,6 +969,34 @@ onMounted(loadData);
                     </div>
                     <div v-else>
                         <div v-if="tournament.format === 'groups'">
+                             <div v-if="playoffQueuedGames.length > 0" class="p-2">
+                                <h4 class="font-bold text-indigo-800 bg-indigo-100 px-3 py-2 rounded-lg text-sm sticky top-0">
+                                    Pavouk
+                                </h4>
+                                <div class="grid gap-2 pt-3">
+                                    <button v-for="match in playoffQueuedGames" :key="match.id" 
+                                        @click="!getMatchConflictReason(match) && assignMatchToVenue(match.id)"
+                                        :disabled="!!getMatchConflictReason(match)"
+                                        class="flex items-center justify-between p-4 rounded-lg border transition-all group text-left relative overflow-hidden shadow-sm"
+                                        :class="getMatchConflictReason(match) 
+                                            ? 'bg-gray-100 border-gray-200 opacity-60 cursor-not-allowed grayscale' 
+                                            : 'bg-white border-gray-200 hover:border-indigo-500 hover:bg-indigo-50 hover:shadow-md cursor-pointer'">
+                                        <div class="flex-1">
+                                            <div class="font-bold text-lg" :class="getMatchConflictReason(match) ? 'text-gray-500' : 'text-gray-800 group-hover:text-indigo-700'">
+                                                {{ match.player1.name }} <span class="text-gray-400 font-normal text-sm">vs</span> {{ match.player2.name }}
+                                            </div>
+                                            <div class="text-xs text-gray-400 mt-1">ID zápasu: #{{ match.id }}</div>
+                                            <div v-if="getMatchConflictReason(match)" class="text-xs text-red-500 font-bold mt-2 flex items-center gap-1 bg-red-50 p-1 rounded w-fit px-2">
+                                                <span>⛔</span> {{ getMatchConflictReason(match) }} je zaneprázdněn
+                                            </div>
+                                        </div>
+                                        <div v-if="!getMatchConflictReason(match)" class="bg-indigo-100 text-indigo-600 w-8 h-8 flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 transition-all transform group-hover:translate-x-0 translate-x-2">➤</div>
+                                    </button>
+                                </div>
+                                <div v-if="playoffQueuedGames.length === 0" class="text-center py-4 text-sm text-gray-400 italic">
+                                    V pavouku nejsou žádné zápasy ve frontě.
+                                </div>
+                            </div>
                              <div v-for="group in groupedQueuedGames" :key="group.id" class="p-2">
                                 <h4 class="font-bold text-indigo-800 bg-indigo-100 px-3 py-2 rounded-lg text-sm sticky top-0">
                                     {{ group.name }}
