@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useTournamentStore } from '@/stores/tournament';
 import api from '@/axios';
@@ -10,6 +10,8 @@ const store = useTournamentStore();
 const tournament = computed(() => store.currentTournament);
 const standings = ref([]);
 const newPlayerName = ref('');
+const showFinalStandingsDialog = ref(false);
+const finalDialogAutoOpenedForTournamentId = ref(null);
 
 // --- MODAL PRO VÝBĚR ZÁPASU ---
 const showAssignModal = ref(false);
@@ -299,6 +301,26 @@ const finalStandings = computed(() => {
         });
 });
 
+const podiumStandings = computed(() => finalStandings.value.slice(0, 3));
+const restStandings = computed(() => finalStandings.value.slice(3));
+const podiumColumns = computed(() => [
+    {
+        place: 2,
+        player: podiumStandings.value[1] || null,
+        pedestalClass: 'h-24 bg-slate-200 text-slate-700'
+    },
+    {
+        place: 1,
+        player: podiumStandings.value[0] || null,
+        pedestalClass: 'h-32 bg-amber-300 text-amber-900'
+    },
+    {
+        place: 3,
+        player: podiumStandings.value[2] || null,
+        pedestalClass: 'h-20 bg-orange-200 text-orange-800'
+    }
+]);
+
 // --- OPRAVA: TOTO ZDE CHYBĚLO ---
 // Potřebujeme seznam běžících zápasů pro kontrolu kolizí hráčů
 const activeGames = computed(() => 
@@ -538,6 +560,23 @@ const downloadExport = () => {
     window.location.href = exportUrl;
 };
 
+watch(
+    [() => tournament.value?.id, () => tournament.value?.status, () => finalStandings.value.length],
+    ([tournamentId, status, standingsCount]) => {
+        if (!tournamentId || status !== 'finished' || standingsCount === 0) {
+            return;
+        }
+
+        if (finalDialogAutoOpenedForTournamentId.value === tournamentId) {
+            return;
+        }
+
+        showFinalStandingsDialog.value = true;
+        finalDialogAutoOpenedForTournamentId.value = tournamentId;
+    },
+    { immediate: true }
+);
+
 onMounted(loadData);
 </script>
 
@@ -617,8 +656,19 @@ onMounted(loadData);
             
             <div class="lg:col-span-1 space-y-6">
                 <div v-if="tournament.status === 'finished' && finalStandings.length" class="bg-white rounded-xl shadow overflow-hidden">
-                    <div class="px-4 py-3 border-b border-gray-100 bg-emerald-50 text-emerald-800 font-bold">Konečné pořadí</div>
-                    <StandingsTable :standings="finalStandings" />
+                    <div class="px-4 py-3 border-b border-gray-100 bg-emerald-50 text-emerald-800 font-bold flex items-center justify-between">
+                        <span>Konečné pořadí</span>
+                        <button
+                            @click="showFinalStandingsDialog = true"
+                            class="text-xs font-bold bg-white text-emerald-700 border border-emerald-200 px-3 py-1 rounded-full hover:bg-emerald-100 transition-colors"
+                        >
+                            Zobrazit podium
+                        </button>
+                    </div>
+                    <div class="p-4 space-y-2 bg-gradient-to-br from-emerald-50 via-white to-white">
+                        <div class="text-sm text-gray-600">🏁 Turnaj je dokončen. Otevři dialog s výsledky.</div>
+                        <div class="text-xs text-gray-500">Top 3: {{ podiumStandings.map(p => p?.name).filter(Boolean).join(' • ') }}</div>
+                    </div>
                 </div>
                 <div v-if="tournament.format === 'round_robin'" class="bg-white rounded-xl shadow overflow-hidden">
                     <StandingsTable :standings="standings" />
@@ -952,6 +1002,59 @@ onMounted(loadData);
 
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="showFinalStandingsDialog" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center backdrop-blur-sm p-4 animate-fade-in" @click.self="showFinalStandingsDialog = false">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-3xl w-full overflow-hidden">
+                <div class="px-6 py-4 bg-emerald-600 text-white flex items-center justify-between">
+                    <div>
+                        <h3 class="font-bold text-xl">Konečné pořadí</h3>
+                        <p class="text-emerald-100 text-sm">{{ tournament.name }}</p>
+                    </div>
+                    <button @click="showFinalStandingsDialog = false" class="text-emerald-100 hover:text-white text-2xl leading-none">&times;</button>
+                </div>
+
+                <div class="p-6 bg-gradient-to-b from-emerald-50 to-white space-y-6">
+                    <div>
+                        <div class="text-sm font-bold text-emerald-700 uppercase tracking-widest mb-3">Stupně vítězů</div>
+                        <div class="grid grid-cols-3 gap-3 items-end">
+                            <div v-for="column in podiumColumns" :key="column.place" class="text-center">
+                                <div class="mb-2">
+                                    <div class="text-xs text-gray-500 uppercase tracking-widest">{{ column.place }}. místo</div>
+                                    <div class="font-bold text-gray-800 truncate" :title="column.player?.name || '---'">{{ column.player?.name || '---' }}</div>
+                                    <div v-if="column.player" class="text-[11px] text-gray-500">{{ column.player.points }} b • SD {{ column.player.score_diff }}</div>
+                                </div>
+                                <div class="rounded-t-xl border border-white/60 shadow-inner flex items-center justify-center font-extrabold text-lg" :class="column.pedestalClass">
+                                    {{ column.place }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-if="restStandings.length">
+                        <div class="text-sm font-bold text-gray-700 uppercase tracking-widest mb-3">Další pořadí</div>
+                        <div class="max-h-64 overflow-y-auto pr-1 space-y-2">
+                            <div
+                                v-for="(player, index) in restStandings"
+                                :key="player.id"
+                                class="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2"
+                            >
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <span class="text-sm font-black text-gray-500 w-8">{{ index + 4 }}.</span>
+                                    <span class="font-semibold text-gray-800 truncate" :title="player.name">{{ player.name }}</span>
+                                </div>
+                                <div class="text-xs text-gray-500 shrink-0">{{ player.points }} b • SD {{ player.score_diff }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="px-6 py-4 border-t border-gray-100 bg-white text-right">
+                    <button @click="showFinalStandingsDialog = false" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-lg transition-colors">
+                        Zavřít
+                    </button>
                 </div>
             </div>
         </div>
