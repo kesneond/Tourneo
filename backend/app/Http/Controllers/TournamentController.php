@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Tournament;
 use App\Models\Game;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class TournamentController extends Controller
 {
@@ -293,6 +294,17 @@ class TournamentController extends Controller
                     echo '<div class="sub-heading">Skupina: ' . htmlspecialchars($group->name) . '</div>';
                     $this->renderExcelTableForPlayers($group->players, $group->games, $tournament, $getColLetter);
                 }
+
+                $playoffGames = $tournament->games()
+                    ->whereNull('group_id')
+                    ->with(['player1', 'player2'])
+                    ->orderBy('round')
+                    ->orderBy('created_at')
+                    ->get();
+
+                if ($playoffGames->isNotEmpty()) {
+                    $this->renderPlayoffGamesExportSection($playoffGames);
+                }
             } else {
                 $this->renderExcelTableForPlayers($tournament->players, $tournament->games, $tournament, $getColLetter);
             }
@@ -301,6 +313,83 @@ class TournamentController extends Controller
         };
 
         return response()->stream($callback, 200, $headers);
+    }
+
+    private function renderPlayoffGamesExportSection($playoffGames)
+    {
+        echo '<div class="sub-heading" style="margin-top: 10px;">Pavouk (playoff)</div>';
+
+        $finishedGames = $playoffGames->where('status', 'finished');
+        $scheduledGames = $playoffGames->where('status', '!=', 'finished');
+
+        echo '<table>';
+        echo '<tr><td colspan="6" class="sub-heading" style="color: green;">Playoff - odehrané zápasy</td></tr>';
+        echo '<tr><th>Kolo</th><th>ID</th><th>Hráč 1</th><th>Výsledek</th><th>Hráč 2</th><th>Čas</th></tr>';
+
+        if ($finishedGames->isEmpty()) {
+            echo '<tr><td colspan="6" style="color:gray;">Zatím žádné odehrané playoff zápasy.</td></tr>';
+        } else {
+            foreach ($finishedGames as $game) {
+                try {
+                    $s1 = (int)$game->score1;
+                    $s2 = (int)$game->score2;
+                    $p1Style = $s1 > $s2 ? 'font-weight:bold; color:green;' : '';
+                    $p2Style = $s2 > $s1 ? 'font-weight:bold; color:green;' : '';
+                    $round = $game->round ?? '-';
+                    $player1 = $game->player1 ? htmlspecialchars($game->player1->name) : '-';
+                    $player2 = $game->player2 ? htmlspecialchars($game->player2->name) : '-';
+
+                    echo '<tr>';
+                    echo "<td>{$round}</td>";
+                    echo "<td>#{$game->id}</td>";
+                    echo "<td style='{$p1Style}'>{$player1}</td>";
+                    echo "<td class='text-cell' style='font-weight:bold; background-color: #f9f9f9;'>{$s1}:{$s2}</td>";
+                    echo "<td style='{$p2Style}'>{$player2}</td>";
+                    echo "<td>" . ($game->updated_at ? $game->updated_at->format('H:i') : '-') . "</td>";
+                    echo '</tr>';
+                } catch (\Throwable $e) {
+                    Log::warning('Export playoff finished game skipped due to rendering error.', [
+                        'tournament_id' => $game->tournament_id,
+                        'game_id' => $game->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                    continue;
+                }
+            }
+        }
+        echo '</table>';
+
+        echo '<table>';
+        echo '<tr><td colspan="5" class="sub-heading" style="color: orange;">Playoff - naplánované zápasy</td></tr>';
+        echo '<tr><th>Kolo</th><th>ID</th><th>Hráč 1</th><th>vs</th><th>Hráč 2</th></tr>';
+
+        if ($scheduledGames->isEmpty()) {
+            echo '<tr><td colspan="5" style="color:gray;">Žádné další playoff zápasy.</td></tr>';
+        } else {
+            foreach ($scheduledGames as $game) {
+                try {
+                    $round = $game->round ?? '-';
+                    $player1 = $game->player1 ? htmlspecialchars($game->player1->name) : '-';
+                    $player2 = $game->player2 ? htmlspecialchars($game->player2->name) : '-';
+
+                    echo '<tr>';
+                    echo "<td>{$round}</td>";
+                    echo "<td>#{$game->id}</td>";
+                    echo "<td>{$player1}</td>";
+                    echo '<td>vs</td>';
+                    echo "<td>{$player2}</td>";
+                    echo '</tr>';
+                } catch (\Throwable $e) {
+                    Log::warning('Export playoff scheduled game skipped due to rendering error.', [
+                        'tournament_id' => $game->tournament_id,
+                        'game_id' => $game->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                    continue;
+                }
+            }
+        }
+        echo '</table>';
     }
 
     private function renderExcelTableForPlayers($players, $games, Tournament $tournament, callable $getColLetter)
@@ -386,18 +475,27 @@ class TournamentController extends Controller
             echo '<tr><td colspan="5" style="color:gray;">Zatím žádné odehrané zápasy.</td></tr>';
         } else {
             foreach ($finishedGames as $game) {
-                $s1 = (int)$game->score1;
-                $s2 = (int)$game->score2;
-                $p1Style = $s1 > $s2 ? 'font-weight:bold; color:green;' : '';
-                $p2Style = $s2 > $s1 ? 'font-weight:bold; color:green;' : '';
+                try {
+                    $s1 = (int)$game->score1;
+                    $s2 = (int)$game->score2;
+                    $p1Style = $s1 > $s2 ? 'font-weight:bold; color:green;' : '';
+                    $p2Style = $s2 > $s1 ? 'font-weight:bold; color:green;' : '';
 
-                echo '<tr>';
-                echo "<td>#{$game->id}</td>";
-                echo "<td style='{$p1Style}'>" . htmlspecialchars($game->player1->name) . "</td>";
-                echo "<td class='text-cell' style='font-weight:bold; background-color: #f9f9f9;'>{$s1}:{$s2}</td>";
-                echo "<td style='{$p2Style}'>" . htmlspecialchars($game->player2->name) . "</td>";
-                echo "<td>" . ($game->updated_at ? $game->updated_at->format('H:i') : '-') . "</td>";
-                echo '</tr>';
+                    echo '<tr>';
+                    echo "<td>#{$game->id}</td>";
+                    echo "<td style='{$p1Style}'>" . htmlspecialchars($game->player1->name) . "</td>";
+                    echo "<td class='text-cell' style='font-weight:bold; background-color: #f9f9f9;'>{$s1}:{$s2}</td>";
+                    echo "<td style='{$p2Style}'>" . htmlspecialchars($game->player2->name) . "</td>";
+                    echo "<td>" . ($game->updated_at ? $game->updated_at->format('H:i') : '-') . "</td>";
+                    echo '</tr>';
+                } catch (\Throwable $e) {
+                    Log::warning('Export group finished game skipped due to rendering error.', [
+                        'tournament_id' => $game->tournament_id,
+                        'game_id' => $game->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                    continue;
+                }
             }
         }
         echo '</table>';
@@ -413,12 +511,21 @@ class TournamentController extends Controller
             echo '<tr><td colspan="4" style="color:gray;">Žádné další zápasy.</td></tr>';
         } else {
             foreach ($scheduledGames as $game) {
-                echo '<tr>';
-                echo "<td>#{$game->id}</td>";
-                echo "<td>" . htmlspecialchars($game->player1->name) . "</td>";
-                echo "<td>vs</td>";
-                echo "<td>" . htmlspecialchars($game->player2->name) . "</td>";
-                echo '</tr>';
+                try {
+                    echo '<tr>';
+                    echo "<td>#{$game->id}</td>";
+                    echo "<td>" . htmlspecialchars($game->player1->name) . "</td>";
+                    echo "<td>vs</td>";
+                    echo "<td>" . htmlspecialchars($game->player2->name) . "</td>";
+                    echo '</tr>';
+                } catch (\Throwable $e) {
+                    Log::warning('Export group scheduled game skipped due to rendering error.', [
+                        'tournament_id' => $game->tournament_id,
+                        'game_id' => $game->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                    continue;
+                }
             }
         }
         echo '</table>';
